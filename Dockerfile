@@ -2,10 +2,13 @@
 
 # ---------------------------------------------------------------------------
 # 1) deps: instala TODAS as dependências (inclui devDependencies) para build.
+#    O schema é copiado antes do `npm ci` porque o script `postinstall`
+#    (prisma generate) precisa dele — sem isso a instalação falha aqui.
 # ---------------------------------------------------------------------------
 FROM node:24-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY prisma ./prisma
 RUN npm ci
 
 # ---------------------------------------------------------------------------
@@ -28,6 +31,7 @@ RUN npm run build
 FROM node:24-alpine AS prod-deps
 WORKDIR /app
 COPY package.json package-lock.json ./
+COPY prisma ./prisma
 RUN npm ci --omit=dev
 
 # ---------------------------------------------------------------------------
