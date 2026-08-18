@@ -18,11 +18,15 @@ RUN npm ci
 
 # ---------------------------------------------------------------------------
 # 2) builder: gera o Prisma Client e o build standalone do Next.js.
-#    Não precisa de DATABASE_URL real — só é usada em runtime.
+#    `prisma.config.ts` exige DATABASE_URL só para o arquivo de config
+#    carregar (mesmo `prisma generate`, que não conecta no banco de verdade,
+#    só lê o schema). Por isso um valor fictício aqui — o real só existe em
+#    runtime, via variável de ambiente do Coolify.
 # ---------------------------------------------------------------------------
 FROM node:24-alpine AS builder
 WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV DATABASE_URL="mysql://user:password@localhost:3306/placeholder"
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 RUN npx prisma generate
