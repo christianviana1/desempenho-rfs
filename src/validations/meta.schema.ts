@@ -1,7 +1,5 @@
 import { z } from "zod"
 
-import { periodoSchema } from "@/validations/periodo.schema"
-
 const nonNegativeInt = z.number().int().min(0, "Não pode ser negativo.")
 
 export const metaSeguroInputSchema = z.object({
@@ -9,9 +7,9 @@ export const metaSeguroInputSchema = z.object({
   quantidadeMeta: nonNegativeInt,
 })
 
+/** A meta é individual (o mesmo alvo vale para todos os operadores ativos), não configurada por operador. */
 export const upsertMetaMensalSchema = z
   .object({
-    operadorId: z.number().int().positive(),
     mes: z.number().int().min(1, "Mês inválido.").max(12, "Mês inválido."),
     ano: z.number().int().min(2000, "Ano inválido.").max(2100, "Ano inválido."),
     metaDigitadas: nonNegativeInt,
@@ -25,9 +23,3 @@ export const upsertMetaMensalSchema = z
   )
 
 export type UpsertMetaMensalInput = z.infer<typeof upsertMetaMensalSchema>
-
-export const metaFiltroSchema = periodoSchema.extend({
-  operadorId: z.coerce.number().int().positive().optional(),
-})
-
-export type MetaFiltroInput = z.infer<typeof metaFiltroSchema>

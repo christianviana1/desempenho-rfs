@@ -27,7 +27,6 @@ model Operador {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  metasMensais       MetaMensal[]
   lancamentosDiarios LancamentoDiario[]
 
   @@index([ativo])
@@ -48,12 +47,12 @@ model TipoSeguro {
   @@map("tipos_seguro")
 }
 
-/// Meta mensal de um operador. As metas por tipo de seguro ficam em
-/// MetaSeguroMensal (1:N), permitindo qualquer quantidade de seguros ativos
-/// sem alterar esta tabela.
+/// Meta mensal individual — o mesmo alvo vale para todos os operadores
+/// ativos (não é configurada por operador). Uma única linha por mês/ano.
+/// As metas por tipo de seguro ficam em MetaSeguroMensal (1:N), permitindo
+/// qualquer quantidade de seguros ativos sem alterar esta tabela.
 model MetaMensal {
   id            Int      @id @default(autoincrement())
-  operadorId    Int      @map("operador_id")
   mes           Int      @db.TinyInt
   ano           Int
   metaDigitadas Int      @default(0) @map("meta_digitadas") @db.UnsignedInt
@@ -61,11 +60,9 @@ model MetaMensal {
   metaSocios    Int      @default(0) @map("meta_socios") @db.UnsignedInt
   createdAt     DateTime @default(now()) @map("created_at")
 
-  operador     Operador           @relation(fields: [operadorId], references: [id], onDelete: Restrict)
   metasSeguros MetaSeguroMensal[]
 
-  @@unique([operadorId, mes, ano])
-  @@index([mes, ano])
+  @@unique([mes, ano])
   @@map("metas_mensais")
 }
 

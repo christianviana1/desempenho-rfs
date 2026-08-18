@@ -2,24 +2,18 @@ import { NextResponse, type NextRequest } from "next/server"
 
 import { requireAdmin, requireAuth } from "@/lib/auth"
 import { handleApiError } from "@/lib/api-error"
-import { Perfil } from "@/lib/session"
-import { getMetaMensal, listMetasMensais, upsertMetaMensal } from "@/services/meta.service"
-import { metaFiltroSchema, upsertMetaMensalSchema } from "@/validations/meta.schema"
+import { getMetaMensal, upsertMetaMensal } from "@/services/meta.service"
+import { upsertMetaMensalSchema } from "@/validations/meta.schema"
+import { periodoSchema } from "@/validations/periodo.schema"
 
+/** A meta é individual (mesmo alvo para todos os operadores ativos) — qualquer usuário autenticado pode consultá-la. */
 export async function GET(request: NextRequest) {
   try {
-    const session = await requireAuth()
-    const { mes, ano, operadorId } = metaFiltroSchema.parse(
-      Object.fromEntries(request.nextUrl.searchParams)
-    )
+    await requireAuth()
+    const { mes, ano } = periodoSchema.parse(Object.fromEntries(request.nextUrl.searchParams))
 
-    if (session.perfil !== Perfil.ADMIN) {
-      const meta = await getMetaMensal(session.operadorId, mes, ano)
-      return NextResponse.json(meta ? [meta] : [])
-    }
-
-    const metas = await listMetasMensais({ mes, ano, operadorId })
-    return NextResponse.json(metas)
+    const meta = await getMetaMensal(mes, ano)
+    return NextResponse.json(meta)
   } catch (error) {
     return handleApiError(error)
   }

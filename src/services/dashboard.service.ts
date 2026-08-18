@@ -41,7 +41,7 @@ export async function getResumoOperador(
   const [evolucao, composicaoSeguros, meta] = await Promise.all([
     getEvolucaoDiaria(operadorId, mes, ano),
     getComposicaoSeguros(mes, ano, operadorId),
-    getMetaMensal(operadorId, mes, ano),
+    getMetaMensal(mes, ano),
   ])
 
   const ultimoDia = evolucao[evolucao.length - 1]

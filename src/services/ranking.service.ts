@@ -1,6 +1,6 @@
 import "server-only"
 
-import { prisma } from "@/lib/prisma"
+import { getMetaMensal } from "@/services/meta.service"
 import { getTotaisMensalPorOperador } from "@/services/producao.service"
 
 export type RankingOrdenarPor =
@@ -78,6 +78,10 @@ function metricaPrincipal(item: Omit<RankingItem, "posicao" | "valorMetricaPrinc
  * soma(digitadas + contas + sócios + total de seguros realizados) dividido
  * pela soma das respectivas metas (0 quando a soma de metas é 0, para não
  * favorecer operadores sem nenhuma meta cadastrada).
+ *
+ * A meta é individual e única por período (o mesmo alvo vale para todos os
+ * operadores ativos, não é configurada por operador — ver meta.service.ts),
+ * então o mesmo objeto de meta é aplicado a cada item do ranking.
  */
 export async function getRanking(params: {
   mes: number
@@ -86,23 +90,14 @@ export async function getRanking(params: {
 }): Promise<RankingItem[]> {
   const { mes, ano, ordenarPor } = params
 
-  const [totais, metas] = await Promise.all([
-    getTotaisMensalPorOperador(mes, ano),
-    prisma.metaMensal.findMany({
-      where: { mes, ano },
-      include: { metasSeguros: true },
-    }),
-  ])
+  const [totais, meta] = await Promise.all([getTotaisMensalPorOperador(mes, ano), getMetaMensal(mes, ano)])
 
-  const metaPorOperador = new Map(metas.map((m) => [m.operadorId, m]))
+  const metaSegurosTotal = meta?.metasSeguros.reduce((acc, s) => acc + s.quantidadeMeta, 0) ?? 0
+  const metaDigitadas = meta?.metaDigitadas ?? 0
+  const metaContas = meta?.metaContas ?? 0
+  const metaSocios = meta?.metaSocios ?? 0
 
   const itensSemPosicao = totais.map((total) => {
-    const meta = metaPorOperador.get(total.operadorId)
-    const metaSegurosTotal = meta?.metasSeguros.reduce((acc, s) => acc + s.quantidadeMeta, 0) ?? 0
-    const metaDigitadas = meta?.metaDigitadas ?? 0
-    const metaContas = meta?.metaContas ?? 0
-    const metaSocios = meta?.metaSocios ?? 0
-
     const realizadoTotal = total.qtdDigitadas + total.qtdContas + total.qtdSocios + total.totalSeguros
     const metaTotal = metaDigitadas + metaContas + metaSocios + metaSegurosTotal
     const percentualMeta = metaTotal > 0 ? (realizadoTotal / metaTotal) * 100 : 0
