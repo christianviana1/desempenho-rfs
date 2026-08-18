@@ -3,7 +3,17 @@
 import { useState, type ReactNode } from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LineChart, Menu } from "lucide-react"
+import {
+  BarChart3,
+  ClipboardList,
+  LayoutDashboard,
+  LineChart,
+  Menu,
+  ShieldCheck,
+  Target,
+  Trophy,
+  Users,
+} from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
@@ -11,11 +21,32 @@ import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 import { LogoutButton } from "@/components/shared/logout-button"
 
-export type NavItem = {
+type NavItem = {
   href: string
   label: string
   icon: LucideIcon
 }
+
+/**
+ * As listas de navegação (com os componentes de ícone) vivem aqui, no
+ * client component, porque referências a componentes/funções não podem
+ * atravessar a fronteira Server Component -> Client Component como prop.
+ */
+const ADMIN_NAV_ITEMS: NavItem[] = [
+  { href: "/admin", label: "Visão Geral", icon: LayoutDashboard },
+  { href: "/admin/operadores", label: "Operadores", icon: Users },
+  { href: "/admin/seguros", label: "Tipos de Seguro", icon: ShieldCheck },
+  { href: "/admin/metas", label: "Metas Mensais", icon: Target },
+  { href: "/admin/fechamento", label: "Fechamento Diário", icon: ClipboardList },
+  { href: "/admin/ranking", label: "Ranking", icon: Trophy },
+  { href: "/admin/relatorios", label: "Relatórios", icon: BarChart3 },
+]
+
+const DASHBOARD_NAV_ITEMS: NavItem[] = [
+  { href: "/dashboard", label: "Meu Painel", icon: LayoutDashboard },
+  { href: "/dashboard/lancamento", label: "Lançar Produção", icon: ClipboardList },
+  { href: "/dashboard/ranking", label: "Ranking", icon: Trophy },
+]
 
 function isActiveHref(pathname: string, href: string, rootHrefs: string[]): boolean {
   if (pathname === href) return true
@@ -61,21 +92,21 @@ function NavLinks({
 }
 
 export function AppShell({
-  navItems,
-  rootHref,
+  role,
   userName,
   userRoleLabel,
   children,
 }: {
-  navItems: NavItem[]
-  /** href da página inicial da seção (ex: "/admin"), usado para não marcar como ativo em sub-rotas. */
-  rootHref: string
+  role: "admin" | "dashboard"
   userName: string
   userRoleLabel: string
   children: ReactNode
 }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
+
+  const navItems = role === "admin" ? ADMIN_NAV_ITEMS : DASHBOARD_NAV_ITEMS
+  const rootHref = role === "admin" ? "/admin" : "/dashboard"
 
   const currentLabel = navItems.find((item) => isActiveHref(pathname, item.href, [rootHref]))?.label
 
