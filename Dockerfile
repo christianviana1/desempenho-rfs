@@ -4,9 +4,14 @@
 # 1) deps: instala TODAS as dependências (inclui devDependencies) para build.
 #    O schema é copiado antes do `npm ci` porque o script `postinstall`
 #    (prisma generate) precisa dele — sem isso a instalação falha aqui.
+#    NODE_ENV é forçado para "development" aqui porque algumas plataformas
+#    (Coolify inclusive) injetam NODE_ENV=production no ambiente de build por
+#    padrão, o que faz `npm ci` pular devDependencies (ex.: @tailwindcss/postcss,
+#    typescript) necessárias para o `next build` no próximo estágio.
 # ---------------------------------------------------------------------------
 FROM node:24-alpine AS deps
 WORKDIR /app
+ENV NODE_ENV=development
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
 RUN npm ci
