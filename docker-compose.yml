@@ -1,0 +1,32 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      SESSION_SECRET: ${SESSION_SECRET}
+      NODE_ENV: production
+    restart: unless-stopped
+
+  # Serviço opcional, apenas para DESENVOLVIMENTO LOCAL:
+  #   docker compose --profile dev up
+  # Em produção (Coolify) o MySQL já está hospedado separadamente — não
+  # suba este serviço lá, apenas aponte DATABASE_URL para o banco existente.
+  mysql:
+    image: mysql:8.4
+    profiles: ["dev"]
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-rootpassword}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-desempenho_rfs}
+      MYSQL_USER: ${MYSQL_USER:-app}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:-app}
+    ports:
+      - "3306:3306"
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+volumes:
+  mysql_data:

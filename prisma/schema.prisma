@@ -1,0 +1,118 @@
+// Schema do Sistema de Gestão de Produção, Metas e Ranking de Operadores.
+// Nenhum tipo de seguro ou operador é fixo no código: tipos_seguro é a
+// fonte de verdade e todas as tabelas de meta/lançamento referenciam-na
+// dinamicamente via tipo_seguro_id.
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+enum Perfil {
+  ADMIN
+  OPERADOR
+}
+
+model Operador {
+  id        Int      @id @default(autoincrement())
+  nome      String   @db.VarChar(120)
+  login     String   @unique @db.VarChar(60)
+  perfil    Perfil
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  metasMensais       MetaMensal[]
+  lancamentosDiarios LancamentoDiario[]
+
+  @@index([ativo])
+  @@map("operadores")
+}
+
+model TipoSeguro {
+  id        Int      @id @default(autoincrement())
+  nome      String   @unique @db.VarChar(120)
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  metasSeguros       MetaSeguroMensal[]
+  lancamentosSeguros LancamentoSeguroDiario[]
+
+  @@index([ativo])
+  @@map("tipos_seguro")
+}
+
+/// Meta mensal de um operador. As metas por tipo de seguro ficam em
+/// MetaSeguroMensal (1:N), permitindo qualquer quantidade de seguros ativos
+/// sem alterar esta tabela.
+model MetaMensal {
+  id            Int      @id @default(autoincrement())
+  operadorId    Int      @map("operador_id")
+  mes           Int      @db.TinyInt
+  ano           Int
+  metaDigitadas Int      @default(0) @map("meta_digitadas") @db.UnsignedInt
+  metaContas    Int      @default(0) @map("meta_contas") @db.UnsignedInt
+  metaSocios    Int      @default(0) @map("meta_socios") @db.UnsignedInt
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  operador     Operador           @relation(fields: [operadorId], references: [id], onDelete: Restrict)
+  metasSeguros MetaSeguroMensal[]
+
+  @@unique([operadorId, mes, ano])
+  @@index([mes, ano])
+  @@map("metas_mensais")
+}
+
+model MetaSeguroMensal {
+  id             Int @id @default(autoincrement())
+  metaMensalId   Int @map("meta_mensal_id")
+  tipoSeguroId   Int @map("tipo_seguro_id")
+  quantidadeMeta Int @default(0) @map("quantidade_meta") @db.UnsignedInt
+
+  metaMensal MetaMensal @relation(fields: [metaMensalId], references: [id], onDelete: Cascade)
+  tipoSeguro TipoSeguro @relation(fields: [tipoSeguroId], references: [id], onDelete: Restrict)
+
+  @@unique([metaMensalId, tipoSeguroId])
+  @@index([tipoSeguroId])
+  @@map("metas_seguros_mensais")
+}
+
+/// Lançamento diário consolidado (digitadas/contas/sócios) de um operador.
+/// Os lançamentos por tipo de seguro ficam em LancamentoSeguroDiario (1:N).
+model LancamentoDiario {
+  id           Int      @id @default(autoincrement())
+  operadorId   Int      @map("operador_id")
+  data         DateTime @db.Date
+  qtdDigitadas Int      @default(0) @map("qtd_digitadas") @db.UnsignedInt
+  qtdContas    Int      @default(0) @map("qtd_contas") @db.UnsignedInt
+  qtdSocios    Int      @default(0) @map("qtd_socios") @db.UnsignedInt
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  operador Operador                 @relation(fields: [operadorId], references: [id], onDelete: Restrict)
+  seguros  LancamentoSeguroDiario[]
+
+  @@unique([operadorId, data])
+  @@index([data])
+  @@map("lancamentos_diarios")
+}
+
+model LancamentoSeguroDiario {
+  id                 Int @id @default(autoincrement())
+  lancamentoDiarioId Int @map("lancamento_diario_id")
+  tipoSeguroId       Int @map("tipo_seguro_id")
+  quantidade         Int @default(0) @db.UnsignedInt
+
+  lancamentoDiario LancamentoDiario @relation(fields: [lancamentoDiarioId], references: [id], onDelete: Cascade)
+  tipoSeguro       TipoSeguro       @relation(fields: [tipoSeguroId], references: [id], onDelete: Restrict)
+
+  @@unique([lancamentoDiarioId, tipoSeguroId])
+  @@index([tipoSeguroId])
+  @@map("lancamentos_seguros_diarios")
+}
