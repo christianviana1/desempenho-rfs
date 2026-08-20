@@ -2,6 +2,7 @@ import "server-only"
 
 import { getMetaMensal } from "@/services/meta.service"
 import { getRanking } from "@/services/ranking.service"
+import { listTiposSeguro } from "@/services/seguro.service"
 import {
   getComposicaoSeguros,
   getEvolucaoDiaria,
@@ -18,11 +19,14 @@ export type CardResumo = {
   percentual: number
 }
 
+export type SeguroResumo = CardResumo & { tipoSeguroId: number }
+
 export type ResumoOperador = {
   digitadas: CardResumo
   contas: CardResumo
   socios: CardResumo
-  seguros: CardResumo
+  /** Um item por tipo de seguro ativo — nunca agregado, para mostrar o progresso de cada meta individualmente. */
+  seguros: SeguroResumo[]
   evolucao: EvolucaoDia[]
   composicaoSeguros: ComposicaoSeguro[]
 }
@@ -38,22 +42,36 @@ export async function getResumoOperador(
   mes: number,
   ano: number
 ): Promise<ResumoOperador> {
-  const [evolucao, composicaoSeguros, meta] = await Promise.all([
+  const [evolucao, composicaoSeguros, meta, tiposSeguro] = await Promise.all([
     getEvolucaoDiaria(operadorId, mes, ano),
     getComposicaoSeguros(mes, ano, operadorId),
     getMetaMensal(mes, ano),
+    listTiposSeguro({ apenasAtivos: true }),
   ])
 
   const ultimoDia = evolucao[evolucao.length - 1]
   const realizadoDigitadas = ultimoDia?.acumuladoDigitadas ?? 0
   const realizadoContas = ultimoDia?.acumuladoContas ?? 0
   const realizadoSocios = ultimoDia?.acumuladoSocios ?? 0
-  const realizadoSeguros = ultimoDia?.acumuladoSeguros ?? 0
 
   const metaDigitadas = meta?.metaDigitadas ?? 0
   const metaContas = meta?.metaContas ?? 0
   const metaSocios = meta?.metaSocios ?? 0
-  const metaSegurosTotal = meta?.metasSeguros.reduce((acc, s) => acc + s.quantidadeMeta, 0) ?? 0
+
+  const realizadoPorSeguro = new Map(composicaoSeguros.map((c) => [c.tipoSeguroId, c.total]))
+  const metaPorSeguro = new Map((meta?.metasSeguros ?? []).map((s) => [s.tipoSeguroId, s.quantidadeMeta]))
+
+  const seguros: SeguroResumo[] = tiposSeguro.map((tipo) => {
+    const realizado = realizadoPorSeguro.get(tipo.id) ?? 0
+    const metaSeguro = metaPorSeguro.get(tipo.id) ?? 0
+    return {
+      tipoSeguroId: tipo.id,
+      label: tipo.nome,
+      realizado,
+      meta: metaSeguro,
+      percentual: percentual(realizado, metaSeguro),
+    }
+  })
 
   return {
     digitadas: {
@@ -74,12 +92,7 @@ export async function getResumoOperador(
       meta: metaSocios,
       percentual: percentual(realizadoSocios, metaSocios),
     },
-    seguros: {
-      label: "Seguros",
-      realizado: realizadoSeguros,
-      meta: metaSegurosTotal,
-      percentual: percentual(realizadoSeguros, metaSegurosTotal),
-    },
+    seguros,
     evolucao,
     composicaoSeguros,
   }

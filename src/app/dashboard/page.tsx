@@ -42,19 +42,36 @@ export default function DashboardPage() {
       </div>
 
       {loading || !resumo ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <Skeleton key={i} className="h-36" />
-          ))}
+        <div className="space-y-6">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Skeleton key={i} className="h-36" />
+            ))}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Skeleton key={i} className="h-36" />
+            ))}
+          </div>
         </div>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             <StatCard {...resumo.digitadas} />
             <StatCard {...resumo.contas} />
             <StatCard {...resumo.socios} />
-            <StatCard {...resumo.seguros} />
           </div>
+
+          {resumo.seguros.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-medium text-muted-foreground">Seguros</h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {resumo.seguros.map((seguro) => (
+                  <StatCard key={seguro.tipoSeguroId} {...seguro} />
+                ))}
+              </div>
+            </div>
+          )}
 
           <div className="grid gap-4 lg:grid-cols-3">
             <Card className="lg:col-span-2">
