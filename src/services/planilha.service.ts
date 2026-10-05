@@ -95,10 +95,24 @@ function parseDadosLinha(worksheet: ExcelJS.Worksheet, row: number, maxCol: numb
   const dados: DadosLinha = {}
 
   for (let col = COL_INICIO_METRICAS; col <= maxCol; col++) {
-    const grupo = toText(effectiveCell(worksheet, LINHA_GRUPO, col).value)
-    if (!grupo) continue
+    const grupoRow4 = toText(effectiveCell(worksheet, LINHA_GRUPO, col).value)
+    const periodoCellValue = effectiveCell(worksheet, LINHA_PERIODO, col).value
+    const periodoRow6 = toText(periodoCellValue)
 
-    const periodo = periodoLabel(effectiveCell(worksheet, LINHA_PERIODO, col).value)
+    // Algumas seções (ex.: Ranking de Vendas, Premiados) não têm título mesclado
+    // na linha 4 — só um rótulo na linha 6. Nesses casos, o rótulo da linha 6 vira
+    // o próprio grupo e a coluna é tratada como um valor único, sem período.
+    let grupo: string
+    let periodo: string
+    if (grupoRow4) {
+      grupo = grupoRow4
+      periodo = periodoLabel(periodoCellValue)
+    } else if (periodoRow6) {
+      grupo = periodoRow6
+      periodo = "—"
+    } else {
+      continue
+    }
 
     const campoCellRaw = worksheet.getRow(LINHA_CAMPO).getCell(col)
     let campo: string | null
@@ -134,8 +148,12 @@ export async function importarPlanilha(params: {
     throw new ServiceError("A planilha não contém nenhuma aba.")
   }
 
-  const maxCol = worksheet.actualColumnCount
-  const maxRow = worksheet.actualRowCount
+  // actualColumnCount/actualRowCount contam células POPULADAS, não a última
+  // posição — com colunas inteiramente vazias no meio (comuns neste layout),
+  // isso sub-conta e corta colunas à direita. columnCount/rowCount refletem
+  // a última linha/coluna realmente alcançada.
+  const maxCol = worksheet.columnCount
+  const maxRow = worksheet.rowCount
 
   const linhas: Array<IdentificacaoLinha & { linhaOriginal: number; dados: DadosLinha }> = []
 
