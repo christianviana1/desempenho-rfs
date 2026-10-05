@@ -41,6 +41,11 @@ model ImportacaoPlanilha {
   importadoPor   Operador @relation(fields: [importadoPorId], references: [id])
   importadoEm    DateTime @default(now()) @map("importado_em")
   totalLinhas    Int      @map("total_linhas")
+  /// Lista ordenada [{ grupo, periodo, campo }] na MESMA ordem das colunas da
+  /// planilha original. Necessário porque o tipo JSON do MySQL NÃO preserva a
+  /// ordem de inserção das chaves de um objeto (reordena ao armazenar) — então
+  /// a ordem das colunas não pode depender de Object.keys(linha.dados).
+  colunas Json?
 
   linhas ImportacaoLinha[]
 

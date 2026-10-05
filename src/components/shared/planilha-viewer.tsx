@@ -21,11 +21,11 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { apiFetch } from "@/lib/api-client"
 import { cn } from "@/lib/utils"
+import type { ColunaPlanilha } from "@/services/planilha.service"
 
 type ImportacaoResumo = {
   id: number
@@ -52,7 +52,7 @@ type ImportacaoLinha = {
   dados: Record<string, Record<string, Record<string, unknown>>>
 }
 
-type ImportacaoDetalhe = ImportacaoResumo & { linhas: ImportacaoLinha[] }
+type ImportacaoDetalhe = ImportacaoResumo & { linhas: ImportacaoLinha[]; colunas: ColunaPlanilha[] | null }
 
 const COLUNAS_BASE: { key: string; label: string }[] = [
   { key: "loja", label: "Loja" },
@@ -62,8 +62,6 @@ const COLUNAS_BASE: { key: string; label: string }[] = [
   { key: "divisao", label: "Divisão" },
   { key: "situacao", label: "Situação" },
 ]
-
-const ORDEM_CAMPO = ["Meta", "Real", "(%) Ating.", "Valor"]
 
 function formatarPeriodo(periodo: string): string {
   const match = /^(\d{4})-(\d{2})-\d{2}$/.exec(periodo)
@@ -83,14 +81,34 @@ function formatarValor(campo: string, valor: unknown): string {
   return String(valor)
 }
 
-function valorParaOrdenar(linha: ImportacaoLinha, key: string, grupo: string | null): string | number {
+type ColunaMetrica = ColunaPlanilha & { key: string }
+type GrupoColunas = { grupo: string; colunas: ColunaMetrica[] }
+
+/**
+ * Agrupa o manifesto `colunas` (ordem oficial, vinda do backend) por grupo,
+ * preservando a ordem — NUNCA inferir ordem de Object.keys(linha.dados): o
+ * tipo JSON do MySQL não preserva ordem de inserção de chaves de objeto.
+ */
+function agruparColunas(colunas: ColunaPlanilha[]): GrupoColunas[] {
+  const grupos: GrupoColunas[] = []
+  let atual: GrupoColunas | null = null
+  for (const coluna of colunas) {
+    if (!atual || atual.grupo !== coluna.grupo) {
+      atual = { grupo: coluna.grupo, colunas: [] }
+      grupos.push(atual)
+    }
+    atual.colunas.push({ ...coluna, key: `${coluna.grupo}::${coluna.periodo}::${coluna.campo}` })
+  }
+  return grupos
+}
+
+function valorParaOrdenar(linha: ImportacaoLinha, key: string): string | number {
   const base = COLUNAS_BASE.find((c) => c.key === key)
   if (base) {
     const v = (linha as unknown as Record<string, unknown>)[base.key]
     return typeof v === "number" ? v : String(v ?? "")
   }
-  if (!grupo) return ""
-  const [periodo, campo] = key.split("::")
+  const [grupo, periodo, campo] = key.split("::")
   const v = linha.dados[grupo]?.[periodo]?.[campo]
   if (typeof v === "number") return v
   return String(v ?? "")
@@ -134,7 +152,6 @@ export function PlanilhaViewer({ canManage }: { canManage: boolean }) {
   const [importacoes, setImportacoes] = useState<ImportacaoResumo[] | null>(null)
   const [selecionadaId, setSelecionadaId] = useState<number | null>(null)
   const [detalhe, setDetalhe] = useState<ImportacaoDetalhe | null>(null)
-  const [grupoSelecionado, setGrupoSelecionado] = useState<string | null>(null)
   const [busca, setBusca] = useState("")
   const [sortKey, setSortKey] = useState("nome")
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc")
@@ -172,10 +189,7 @@ export function PlanilhaViewer({ canManage }: { canManage: boolean }) {
     let ativo = true
     apiFetch<ImportacaoDetalhe>(`/api/planilhas/${selecionadaId}`)
       .then((data) => {
-        if (!ativo) return
-        setDetalhe(data)
-        const grupos = Array.from(new Set(data.linhas.flatMap((l) => Object.keys(l.dados)))).sort()
-        setGrupoSelecionado((atual) => (atual && grupos.includes(atual) ? atual : (grupos[0] ?? null)))
+        if (ativo) setDetalhe(data)
       })
       .catch((error: Error) => toast.error(error.message))
     return () => {
@@ -220,30 +234,10 @@ export function PlanilhaViewer({ canManage }: { canManage: boolean }) {
     }
   }
 
-  const grupos = useMemo(() => {
+  const estrutura = useMemo(() => {
     if (!detalhe) return []
-    return Array.from(new Set(detalhe.linhas.flatMap((l) => Object.keys(l.dados)))).sort()
+    return agruparColunas(detalhe.colunas ?? [])
   }, [detalhe])
-
-  const colunasMetrica = useMemo(() => {
-    if (!detalhe || !grupoSelecionado) return []
-    const combos = new Map<string, { periodo: string; campo: string }>()
-    for (const linha of detalhe.linhas) {
-      const porPeriodo = linha.dados[grupoSelecionado]
-      if (!porPeriodo) continue
-      for (const periodo of Object.keys(porPeriodo)) {
-        for (const campo of Object.keys(porPeriodo[periodo])) {
-          combos.set(`${periodo}::${campo}`, { periodo, campo })
-        }
-      }
-    }
-    return Array.from(combos.values()).sort((a, b) => {
-      if (a.periodo !== b.periodo) return a.periodo.localeCompare(b.periodo)
-      const ia = ORDEM_CAMPO.indexOf(a.campo)
-      const ib = ORDEM_CAMPO.indexOf(b.campo)
-      return (ia === -1 ? 99 : ia) - (ib === -1 ? 99 : ib) || a.campo.localeCompare(b.campo)
-    })
-  }, [detalhe, grupoSelecionado])
 
   const linhasFiltradas = useMemo(() => {
     if (!detalhe) return []
@@ -257,8 +251,8 @@ export function PlanilhaViewer({ canManage }: { canManage: boolean }) {
   const linhasOrdenadas = useMemo(() => {
     const copia = [...linhasFiltradas]
     copia.sort((a, b) => {
-      const va = valorParaOrdenar(a, sortKey, grupoSelecionado)
-      const vb = valorParaOrdenar(b, sortKey, grupoSelecionado)
+      const va = valorParaOrdenar(a, sortKey)
+      const vb = valorParaOrdenar(b, sortKey)
       const cmp =
         typeof va === "number" && typeof vb === "number"
           ? va - vb
@@ -266,7 +260,7 @@ export function PlanilhaViewer({ canManage }: { canManage: boolean }) {
       return sortDir === "asc" ? cmp : -cmp
     })
     return copia
-  }, [linhasFiltradas, sortKey, sortDir, grupoSelecionado])
+  }, [linhasFiltradas, sortKey, sortDir])
 
   function handleSort(key: string) {
     if (key === sortKey) {
@@ -397,18 +391,6 @@ export function PlanilhaViewer({ canManage }: { canManage: boolean }) {
                 onChange={(e) => setBusca(e.target.value)}
                 className="w-64"
               />
-              <Select value={grupoSelecionado ?? undefined} onValueChange={setGrupoSelecionado}>
-                <SelectTrigger className="w-56">
-                  <SelectValue placeholder="Grupo de métrica" />
-                </SelectTrigger>
-                <SelectContent>
-                  {grupos.map((g) => (
-                    <SelectItem key={g} value={g}>
-                      {g}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
           </CardHeader>
           <CardContent className="overflow-x-auto p-0">
@@ -423,26 +405,34 @@ export function PlanilhaViewer({ canManage }: { canManage: boolean }) {
                 <TableHeader>
                   <TableRow>
                     {COLUNAS_BASE.map((c) => (
-                      <SortableHead
-                        key={c.key}
-                        label={c.label}
-                        columnKey={c.key}
-                        sortKey={sortKey}
-                        sortDir={sortDir}
-                        onSort={handleSort}
-                      />
+                      <TableHead key={c.key} rowSpan={2} className="align-bottom whitespace-nowrap">
+                        {c.label}
+                      </TableHead>
                     ))}
-                    {colunasMetrica.map(({ periodo, campo }) => (
-                      <SortableHead
-                        key={`${periodo}::${campo}`}
-                        label={`${formatarPeriodo(periodo)} · ${campo}`}
-                        columnKey={`${periodo}::${campo}`}
-                        sortKey={sortKey}
-                        sortDir={sortDir}
-                        onSort={handleSort}
-                        className="whitespace-nowrap"
-                      />
+                    {estrutura.map(({ grupo, colunas }) => (
+                      <TableHead
+                        key={grupo}
+                        colSpan={colunas.length}
+                        className="whitespace-nowrap border-l text-center"
+                      >
+                        {grupo}
+                      </TableHead>
                     ))}
+                  </TableRow>
+                  <TableRow>
+                    {estrutura.flatMap(({ colunas }) =>
+                      colunas.map((coluna, i) => (
+                        <SortableHead
+                          key={coluna.key}
+                          label={coluna.periodo === "—" ? coluna.campo : `${formatarPeriodo(coluna.periodo)} · ${coluna.campo}`}
+                          columnKey={coluna.key}
+                          sortKey={sortKey}
+                          sortDir={sortDir}
+                          onSort={handleSort}
+                          className={cn("whitespace-nowrap", i === 0 && "border-l")}
+                        />
+                      ))
+                    )}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -450,14 +440,19 @@ export function PlanilhaViewer({ canManage }: { canManage: boolean }) {
                     <TableRow key={linha.id}>
                       {COLUNAS_BASE.map((c) => (
                         <TableCell key={c.key} className="whitespace-nowrap">
-                          {(linha as unknown as Record<string, unknown>)[c.key] as string | null ?? "—"}
+                          {((linha as unknown as Record<string, unknown>)[c.key] as string | null) ?? "—"}
                         </TableCell>
                       ))}
-                      {colunasMetrica.map(({ periodo, campo }) => (
-                        <TableCell key={`${periodo}::${campo}`} className="whitespace-nowrap">
-                          {formatarValor(campo, grupoSelecionado ? linha.dados[grupoSelecionado]?.[periodo]?.[campo] : null)}
-                        </TableCell>
-                      ))}
+                      {estrutura.flatMap(({ grupo, colunas }) =>
+                        colunas.map((coluna, i) => (
+                          <TableCell
+                            key={coluna.key}
+                            className={cn("whitespace-nowrap", i === 0 && "border-l")}
+                          >
+                            {formatarValor(coluna.campo, linha.dados[grupo]?.[coluna.periodo]?.[coluna.campo])}
+                          </TableCell>
+                        ))
+                      )}
                     </TableRow>
                   ))}
                 </TableBody>

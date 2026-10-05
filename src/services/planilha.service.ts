@@ -91,38 +91,73 @@ function parseIdentificacao(worksheet: ExcelJS.Worksheet, row: number): Identifi
   }
 }
 
+export type ColunaPlanilha = { grupo: string; periodo: string; campo: string }
+
+/**
+ * Resolve o grupo/período/campo de UMA coluna a partir das linhas de
+ * cabeçalho (4, 6 e 7). Não depende de nenhuma linha de dados, então serve
+ * tanto para montar o manifesto ordenado de colunas quanto para montar os
+ * valores de cada linha.
+ */
+function resolverColuna(worksheet: ExcelJS.Worksheet, col: number): ColunaPlanilha | null {
+  const grupoRow4 = toText(effectiveCell(worksheet, LINHA_GRUPO, col).value)
+  const periodoCellValue = effectiveCell(worksheet, LINHA_PERIODO, col).value
+  const periodoRow6 = toText(periodoCellValue)
+
+  // Algumas seções (ex.: Ranking de Vendas, Premiados) não têm título mesclado
+  // na linha 4 — só um rótulo na linha 6. Nesses casos, o rótulo da linha 6 vira
+  // o próprio grupo e a coluna é tratada como um valor único, sem período.
+  let grupo: string
+  let periodo: string
+  if (grupoRow4) {
+    grupo = grupoRow4
+    periodo = periodoLabel(periodoCellValue)
+  } else if (periodoRow6) {
+    grupo = periodoRow6
+    periodo = "—"
+  } else {
+    return null
+  }
+
+  const campoCellRaw = worksheet.getRow(LINHA_CAMPO).getCell(col)
+  let campo: string | null
+  if (!campoCellRaw.isMerged) {
+    campo = toText(campoCellRaw.value)
+  } else {
+    const master = campoCellRaw.master
+    campo = master.fullAddress.row === LINHA_CAMPO ? toText(master.value) : null
+  }
+  if (!campo) campo = "Valor"
+
+  return { grupo, periodo, campo }
+}
+
+/**
+ * Lista ordenada (esquerda->direita, igual à planilha) de todas as colunas de
+ * métrica. Guardada à parte porque o MySQL não preserva a ordem de inserção
+ * das chaves de um JSON object — só a ordem de um JSON array é confiável.
+ */
+function construirOrdemColunas(worksheet: ExcelJS.Worksheet, maxCol: number): ColunaPlanilha[] {
+  const vistas = new Set<string>()
+  const ordem: ColunaPlanilha[] = []
+  for (let col = COL_INICIO_METRICAS; col <= maxCol; col++) {
+    const coluna = resolverColuna(worksheet, col)
+    if (!coluna) continue
+    const chave = `${coluna.grupo}::${coluna.periodo}::${coluna.campo}`
+    if (vistas.has(chave)) continue
+    vistas.add(chave)
+    ordem.push(coluna)
+  }
+  return ordem
+}
+
 function parseDadosLinha(worksheet: ExcelJS.Worksheet, row: number, maxCol: number): DadosLinha {
   const dados: DadosLinha = {}
 
   for (let col = COL_INICIO_METRICAS; col <= maxCol; col++) {
-    const grupoRow4 = toText(effectiveCell(worksheet, LINHA_GRUPO, col).value)
-    const periodoCellValue = effectiveCell(worksheet, LINHA_PERIODO, col).value
-    const periodoRow6 = toText(periodoCellValue)
-
-    // Algumas seções (ex.: Ranking de Vendas, Premiados) não têm título mesclado
-    // na linha 4 — só um rótulo na linha 6. Nesses casos, o rótulo da linha 6 vira
-    // o próprio grupo e a coluna é tratada como um valor único, sem período.
-    let grupo: string
-    let periodo: string
-    if (grupoRow4) {
-      grupo = grupoRow4
-      periodo = periodoLabel(periodoCellValue)
-    } else if (periodoRow6) {
-      grupo = periodoRow6
-      periodo = "—"
-    } else {
-      continue
-    }
-
-    const campoCellRaw = worksheet.getRow(LINHA_CAMPO).getCell(col)
-    let campo: string | null
-    if (!campoCellRaw.isMerged) {
-      campo = toText(campoCellRaw.value)
-    } else {
-      const master = campoCellRaw.master
-      campo = master.fullAddress.row === LINHA_CAMPO ? toText(master.value) : null
-    }
-    if (!campo) campo = "Valor"
+    const coluna = resolverColuna(worksheet, col)
+    if (!coluna) continue
+    const { grupo, periodo, campo } = coluna
 
     const valor = toPlainValue(worksheet.getRow(row).getCell(col).value)
     if (valor === null) continue
@@ -155,6 +190,8 @@ export async function importarPlanilha(params: {
   const maxCol = worksheet.columnCount
   const maxRow = worksheet.rowCount
 
+  const colunas = construirOrdemColunas(worksheet, maxCol)
+
   const linhas: Array<IdentificacaoLinha & { linhaOriginal: number; dados: DadosLinha }> = []
 
   for (let row = LINHA_INICIO_DADOS; row <= maxRow; row++) {
@@ -177,6 +214,7 @@ export async function importarPlanilha(params: {
       nomeArquivo: params.nomeArquivo,
       importadoPorId: params.importadoPorId,
       totalLinhas: linhas.length,
+      colunas: colunas as object,
       linhas: {
         create: linhas.map((linha) => ({
           linhaOriginal: linha.linhaOriginal,
