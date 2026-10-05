@@ -11,28 +11,32 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { DatePickerField } from "@/components/shared/date-picker-field"
 import { apiFetch } from "@/lib/api-client"
 import { toDateParam } from "@/lib/date-format"
-import type { TipoSeguro } from "@/generated/prisma/client"
+import type { TipoSeguro, TipoSocio } from "@/generated/prisma/client"
 
 type LancamentoResponse = {
   qtdDigitadas: number
   qtdContas: number
-  qtdSocios: number
   seguros: { tipoSeguroId: number; quantidade: number }[]
+  socios: { tipoSocioId: number; quantidade: number }[]
 } | null
 
 export default function LancamentoOperadorPage() {
   const [data, setData] = useState(() => new Date())
   const [tiposSeguro, setTiposSeguro] = useState<Pick<TipoSeguro, "id" | "nome">[]>([])
+  const [tiposSocio, setTiposSocio] = useState<Pick<TipoSocio, "id" | "nome">[]>([])
   const [qtdDigitadas, setQtdDigitadas] = useState(0)
   const [qtdContas, setQtdContas] = useState(0)
-  const [qtdSocios, setQtdSocios] = useState(0)
   const [seguros, setSeguros] = useState<Record<number, number>>({})
+  const [socios, setSocios] = useState<Record<number, number>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
     apiFetch<Pick<TipoSeguro, "id" | "nome">[]>("/api/seguros")
       .then(setTiposSeguro)
+      .catch((error: Error) => toast.error(error.message))
+    apiFetch<Pick<TipoSocio, "id" | "nome">[]>("/api/socios")
+      .then(setTiposSocio)
       .catch((error: Error) => toast.error(error.message))
   }, [])
 
@@ -43,10 +47,12 @@ export default function LancamentoOperadorPage() {
         if (!ativo) return
         setQtdDigitadas(lancamento?.qtdDigitadas ?? 0)
         setQtdContas(lancamento?.qtdContas ?? 0)
-        setQtdSocios(lancamento?.qtdSocios ?? 0)
-        const mapa: Record<number, number> = {}
-        for (const s of lancamento?.seguros ?? []) mapa[s.tipoSeguroId] = s.quantidade
-        setSeguros(mapa)
+        const mapaSeguros: Record<number, number> = {}
+        for (const s of lancamento?.seguros ?? []) mapaSeguros[s.tipoSeguroId] = s.quantidade
+        setSeguros(mapaSeguros)
+        const mapaSocios: Record<number, number> = {}
+        for (const s of lancamento?.socios ?? []) mapaSocios[s.tipoSocioId] = s.quantidade
+        setSocios(mapaSocios)
       })
       .catch((error: Error) => toast.error(error.message))
       .finally(() => {
@@ -66,8 +72,8 @@ export default function LancamentoOperadorPage() {
           data: toDateParam(data),
           qtdDigitadas,
           qtdContas,
-          qtdSocios,
           seguros: tiposSeguro.map((t) => ({ tipoSeguroId: t.id, quantidade: seguros[t.id] ?? 0 })),
+          socios: tiposSocio.map((t) => ({ tipoSocioId: t.id, quantidade: socios[t.id] ?? 0 })),
         }),
       })
       toast.success("Produção salva com sucesso.")
@@ -98,7 +104,7 @@ export default function LancamentoOperadorPage() {
             </div>
           ) : (
             <div className="grid gap-6">
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label htmlFor="digitadas">Digitadas</Label>
                   <Input
@@ -119,16 +125,6 @@ export default function LancamentoOperadorPage() {
                     onChange={(e) => setQtdContas(Math.max(0, Number(e.target.value)))}
                   />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="socios">Sócios</Label>
-                  <Input
-                    id="socios"
-                    type="number"
-                    min={0}
-                    value={qtdSocios}
-                    onChange={(e) => setQtdSocios(Math.max(0, Number(e.target.value)))}
-                  />
-                </div>
               </div>
 
               {tiposSeguro.length > 0 && (
@@ -147,6 +143,30 @@ export default function LancamentoOperadorPage() {
                           value={seguros[tipo.id] ?? 0}
                           onChange={(e) =>
                             setSeguros((prev) => ({ ...prev, [tipo.id]: Math.max(0, Number(e.target.value)) }))
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {tiposSocio.length > 0 && (
+                <div className="grid gap-3">
+                  <Label className="text-muted-foreground">Sócios</Label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {tiposSocio.map((tipo) => (
+                      <div key={tipo.id} className="grid gap-1.5">
+                        <Label htmlFor={`socio-${tipo.id}`} className="text-sm font-normal">
+                          {tipo.nome}
+                        </Label>
+                        <Input
+                          id={`socio-${tipo.id}`}
+                          type="number"
+                          min={0}
+                          value={socios[tipo.id] ?? 0}
+                          onChange={(e) =>
+                            setSocios((prev) => ({ ...prev, [tipo.id]: Math.max(0, Number(e.target.value)) }))
                           }
                         />
                       </div>

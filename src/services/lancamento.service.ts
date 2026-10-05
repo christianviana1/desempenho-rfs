@@ -10,24 +10,29 @@ import type {
 export async function getLancamentoDiario(operadorId: number, data: Date) {
   return prisma.lancamentoDiario.findUnique({
     where: { operadorId_data: { operadorId, data } },
-    include: { seguros: { include: { tipoSeguro: { select: { id: true, nome: true } } } } },
+    include: {
+      seguros: { include: { tipoSeguro: { select: { id: true, nome: true } } } },
+      socios: { include: { tipoSocio: { select: { id: true, nome: true } } } },
+    },
   })
 }
 
 /**
  * Cria ou atualiza o lançamento diário de UM operador (usado tanto pelo
  * lançamento individual do operador quanto, item a item, pelo fechamento em
- * lote do admin). Substitui integralmente os lançamentos por seguro em uma
- * transação — nunca aceita quantidade negativa (garantido pelo schema Zod)
- * e ignora tipos de seguro que não estejam mais ativos.
+ * lote do admin). Substitui integralmente os lançamentos por seguro e por
+ * sócio em uma transação — nunca aceita quantidade negativa (garantido pelo
+ * schema Zod) e ignora tipos de seguro/sócio que não estejam mais ativos.
  */
 export async function upsertLancamentoDiario(operadorId: number, input: UpsertLancamentoDiarioInput) {
-  const tiposAtivos = await prisma.tipoSeguro.findMany({
-    where: { ativo: true },
-    select: { id: true },
-  })
-  const idsAtivos = new Set(tiposAtivos.map((t) => t.id))
-  const segurosValidos = input.seguros.filter((s) => idsAtivos.has(s.tipoSeguroId))
+  const [tiposSeguroAtivos, tiposSocioAtivos] = await Promise.all([
+    prisma.tipoSeguro.findMany({ where: { ativo: true }, select: { id: true } }),
+    prisma.tipoSocio.findMany({ where: { ativo: true }, select: { id: true } }),
+  ])
+  const idsSeguroAtivos = new Set(tiposSeguroAtivos.map((t) => t.id))
+  const idsSocioAtivos = new Set(tiposSocioAtivos.map((t) => t.id))
+  const segurosValidos = input.seguros.filter((s) => idsSeguroAtivos.has(s.tipoSeguroId))
+  const sociosValidos = input.socios.filter((s) => idsSocioAtivos.has(s.tipoSocioId))
 
   return prisma.$transaction(async (tx) => {
     const lancamento = await tx.lancamentoDiario.upsert({
@@ -37,12 +42,10 @@ export async function upsertLancamentoDiario(operadorId: number, input: UpsertLa
         data: input.data,
         qtdDigitadas: input.qtdDigitadas,
         qtdContas: input.qtdContas,
-        qtdSocios: input.qtdSocios,
       },
       update: {
         qtdDigitadas: input.qtdDigitadas,
         qtdContas: input.qtdContas,
-        qtdSocios: input.qtdSocios,
       },
     })
 
@@ -57,9 +60,20 @@ export async function upsertLancamentoDiario(operadorId: number, input: UpsertLa
       })
     }
 
+    await tx.lancamentoSocioDiario.deleteMany({ where: { lancamentoDiarioId: lancamento.id } })
+    if (sociosValidos.length > 0) {
+      await tx.lancamentoSocioDiario.createMany({
+        data: sociosValidos.map((s) => ({
+          lancamentoDiarioId: lancamento.id,
+          tipoSocioId: s.tipoSocioId,
+          quantidade: s.quantidade,
+        })),
+      })
+    }
+
     return tx.lancamentoDiario.findUniqueOrThrow({
       where: { id: lancamento.id },
-      include: { seguros: true },
+      include: { seguros: true, socios: true },
     })
   })
 }
@@ -69,19 +83,20 @@ export type FechamentoDiarioOperador = {
   nome: string
   qtdDigitadas: number
   qtdContas: number
-  qtdSocios: number
   seguros: Record<number, number>
+  socios: Record<number, number>
 }
 
 export type FechamentoDiario = {
   data: string
   tiposSeguro: { id: number; nome: string }[]
+  tiposSocio: { id: number; nome: string }[]
   operadores: FechamentoDiarioOperador[]
 }
 
 /** Dados para a tela de fechamento em lote: todos os operadores ativos + o que já foi lançado na data. */
 export async function getFechamentoDiario(data: Date): Promise<FechamentoDiario> {
-  const [operadores, tiposSeguro] = await Promise.all([
+  const [operadores, tiposSeguro, tiposSocio] = await Promise.all([
     prisma.operador.findMany({
       where: { ativo: true },
       select: {
@@ -89,30 +104,36 @@ export async function getFechamentoDiario(data: Date): Promise<FechamentoDiario>
         nome: true,
         lancamentosDiarios: {
           where: { data },
-          include: { seguros: true },
+          include: { seguros: true, socios: true },
         },
       },
       orderBy: { nome: "asc" },
     }),
     prisma.tipoSeguro.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
+    prisma.tipoSocio.findMany({ where: { ativo: true }, orderBy: { nome: "asc" } }),
   ])
 
   return {
     data: data.toISOString().slice(0, 10),
     tiposSeguro: tiposSeguro.map((t) => ({ id: t.id, nome: t.nome })),
+    tiposSocio: tiposSocio.map((t) => ({ id: t.id, nome: t.nome })),
     operadores: operadores.map((op) => {
       const lancamento = op.lancamentosDiarios[0]
       const seguros: Record<number, number> = {}
       for (const s of lancamento?.seguros ?? []) {
         seguros[s.tipoSeguroId] = s.quantidade
       }
+      const socios: Record<number, number> = {}
+      for (const s of lancamento?.socios ?? []) {
+        socios[s.tipoSocioId] = s.quantidade
+      }
       return {
         operadorId: op.id,
         nome: op.nome,
         qtdDigitadas: lancamento?.qtdDigitadas ?? 0,
         qtdContas: lancamento?.qtdContas ?? 0,
-        qtdSocios: lancamento?.qtdSocios ?? 0,
         seguros,
+        socios,
       }
     }),
   }
@@ -125,12 +146,14 @@ export async function getFechamentoDiario(data: Date): Promise<FechamentoDiario>
  * outros IDs.
  */
 export async function upsertLancamentosBatch(input: LancamentoBatchInput): Promise<number[]> {
-  const [operadoresAtivos, tiposAtivos] = await Promise.all([
+  const [operadoresAtivos, tiposSeguroAtivos, tiposSocioAtivos] = await Promise.all([
     prisma.operador.findMany({ where: { ativo: true }, select: { id: true } }),
     prisma.tipoSeguro.findMany({ where: { ativo: true }, select: { id: true } }),
+    prisma.tipoSocio.findMany({ where: { ativo: true }, select: { id: true } }),
   ])
   const idsOperadoresAtivos = new Set(operadoresAtivos.map((o) => o.id))
-  const idsTiposAtivos = new Set(tiposAtivos.map((t) => t.id))
+  const idsSeguroAtivos = new Set(tiposSeguroAtivos.map((t) => t.id))
+  const idsSocioAtivos = new Set(tiposSocioAtivos.map((t) => t.id))
 
   const itensValidos = input.lancamentos.filter((item) => idsOperadoresAtivos.has(item.operadorId))
   if (itensValidos.length === 0) {
@@ -149,22 +172,32 @@ export async function upsertLancamentosBatch(input: LancamentoBatchInput): Promi
             data: input.data,
             qtdDigitadas: item.qtdDigitadas,
             qtdContas: item.qtdContas,
-            qtdSocios: item.qtdSocios,
           },
           update: {
             qtdDigitadas: item.qtdDigitadas,
             qtdContas: item.qtdContas,
-            qtdSocios: item.qtdSocios,
           },
         })
 
         await tx.lancamentoSeguroDiario.deleteMany({ where: { lancamentoDiarioId: lancamento.id } })
-        const segurosValidos = item.seguros.filter((s) => idsTiposAtivos.has(s.tipoSeguroId))
+        const segurosValidos = item.seguros.filter((s) => idsSeguroAtivos.has(s.tipoSeguroId))
         if (segurosValidos.length > 0) {
           await tx.lancamentoSeguroDiario.createMany({
             data: segurosValidos.map((s) => ({
               lancamentoDiarioId: lancamento.id,
               tipoSeguroId: s.tipoSeguroId,
+              quantidade: s.quantidade,
+            })),
+          })
+        }
+
+        await tx.lancamentoSocioDiario.deleteMany({ where: { lancamentoDiarioId: lancamento.id } })
+        const sociosValidos = item.socios.filter((s) => idsSocioAtivos.has(s.tipoSocioId))
+        if (sociosValidos.length > 0) {
+          await tx.lancamentoSocioDiario.createMany({
+            data: sociosValidos.map((s) => ({
+              lancamentoDiarioId: lancamento.id,
+              tipoSocioId: s.tipoSocioId,
               quantidade: s.quantidade,
             })),
           })

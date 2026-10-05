@@ -10,13 +10,13 @@ import { Label } from "@/components/ui/label"
 import { Skeleton } from "@/components/ui/skeleton"
 import { PeriodoSelect } from "@/components/shared/period-select"
 import { apiFetch } from "@/lib/api-client"
-import type { TipoSeguro } from "@/generated/prisma/client"
+import type { TipoSeguro, TipoSocio } from "@/generated/prisma/client"
 
 type MetaResponse = {
   metaDigitadas: number
   metaContas: number
-  metaSocios: number
   metasSeguros: { tipoSeguroId: number; quantidadeMeta: number }[]
+  metasSocios: { tipoSocioId: number; quantidadeMeta: number }[]
 } | null
 
 export default function MetasPage() {
@@ -24,19 +24,26 @@ export default function MetasPage() {
   const [mes, setMes] = useState(now.getMonth() + 1)
   const [ano, setAno] = useState(now.getFullYear())
   const [tiposSeguro, setTiposSeguro] = useState<Pick<TipoSeguro, "id" | "nome">[]>([])
+  const [tiposSocio, setTiposSocio] = useState<Pick<TipoSocio, "id" | "nome">[]>([])
 
   const [metaDigitadas, setMetaDigitadas] = useState(0)
   const [metaContas, setMetaContas] = useState(0)
-  const [metaSocios, setMetaSocios] = useState(0)
   const [metasSeguros, setMetasSeguros] = useState<Record<number, number>>({})
+  const [metasSocios, setMetasSocios] = useState<Record<number, number>>({})
 
   const [loadingTipos, setLoadingTipos] = useState(true)
   const [loadingMeta, setLoadingMeta] = useState(true)
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    apiFetch<Pick<TipoSeguro, "id" | "nome">[]>("/api/seguros?ativos=true")
-      .then(setTiposSeguro)
+    Promise.all([
+      apiFetch<Pick<TipoSeguro, "id" | "nome">[]>("/api/seguros?ativos=true"),
+      apiFetch<Pick<TipoSocio, "id" | "nome">[]>("/api/socios?ativos=true"),
+    ])
+      .then(([seguros, socios]) => {
+        setTiposSeguro(seguros)
+        setTiposSocio(socios)
+      })
       .catch((error: Error) => toast.error(error.message))
       .finally(() => setLoadingTipos(false))
   }, [])
@@ -48,10 +55,12 @@ export default function MetasPage() {
         if (!ativo) return
         setMetaDigitadas(meta?.metaDigitadas ?? 0)
         setMetaContas(meta?.metaContas ?? 0)
-        setMetaSocios(meta?.metaSocios ?? 0)
-        const mapa: Record<number, number> = {}
-        for (const s of meta?.metasSeguros ?? []) mapa[s.tipoSeguroId] = s.quantidadeMeta
-        setMetasSeguros(mapa)
+        const mapaSeguros: Record<number, number> = {}
+        for (const s of meta?.metasSeguros ?? []) mapaSeguros[s.tipoSeguroId] = s.quantidadeMeta
+        setMetasSeguros(mapaSeguros)
+        const mapaSocios: Record<number, number> = {}
+        for (const s of meta?.metasSocios ?? []) mapaSocios[s.tipoSocioId] = s.quantidadeMeta
+        setMetasSocios(mapaSocios)
       })
       .catch((error: Error) => toast.error(error.message))
       .finally(() => {
@@ -72,8 +81,8 @@ export default function MetasPage() {
           ano,
           metaDigitadas,
           metaContas,
-          metaSocios,
           seguros: tiposSeguro.map((t) => ({ tipoSeguroId: t.id, quantidadeMeta: metasSeguros[t.id] ?? 0 })),
+          socios: tiposSocio.map((t) => ({ tipoSocioId: t.id, quantidadeMeta: metasSocios[t.id] ?? 0 })),
         }),
       })
       toast.success("Meta salva com sucesso.")
@@ -115,7 +124,7 @@ export default function MetasPage() {
             </div>
           ) : (
             <div className="grid gap-6">
-              <div className="grid gap-4 sm:grid-cols-3">
+              <div className="grid gap-4 sm:grid-cols-2">
                 <div className="grid gap-2">
                   <Label htmlFor="meta-digitadas">Meta de Digitadas</Label>
                   <Input
@@ -136,16 +145,6 @@ export default function MetasPage() {
                     onChange={(e) => setMetaContas(Math.max(0, Number(e.target.value)))}
                   />
                 </div>
-                <div className="grid gap-2">
-                  <Label htmlFor="meta-socios">Meta de Sócios</Label>
-                  <Input
-                    id="meta-socios"
-                    type="number"
-                    min={0}
-                    value={metaSocios}
-                    onChange={(e) => setMetaSocios(Math.max(0, Number(e.target.value)))}
-                  />
-                </div>
               </div>
 
               {tiposSeguro.length > 0 && (
@@ -164,6 +163,30 @@ export default function MetasPage() {
                           value={metasSeguros[tipo.id] ?? 0}
                           onChange={(e) =>
                             setMetasSeguros((prev) => ({ ...prev, [tipo.id]: Math.max(0, Number(e.target.value)) }))
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {tiposSocio.length > 0 && (
+                <div className="grid gap-3">
+                  <Label className="text-muted-foreground">Meta por sócio</Label>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {tiposSocio.map((tipo) => (
+                      <div key={tipo.id} className="grid gap-1.5">
+                        <Label htmlFor={`meta-socio-${tipo.id}`} className="text-sm font-normal">
+                          {tipo.nome}
+                        </Label>
+                        <Input
+                          id={`meta-socio-${tipo.id}`}
+                          type="number"
+                          min={0}
+                          value={metasSocios[tipo.id] ?? 0}
+                          onChange={(e) =>
+                            setMetasSocios((prev) => ({ ...prev, [tipo.id]: Math.max(0, Number(e.target.value)) }))
                           }
                         />
                       </div>

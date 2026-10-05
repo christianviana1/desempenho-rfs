@@ -8,7 +8,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { PeriodoSelect } from "@/components/shared/period-select"
 import { StatCard } from "@/components/dashboard/stat-card"
 import { EvolucaoChart } from "@/components/dashboard/evolucao-chart"
-import { ComposicaoSegurosChart } from "@/components/dashboard/composicao-seguros-chart"
+import { ComposicaoChart } from "@/components/dashboard/composicao-chart"
 import { apiFetch } from "@/lib/api-client"
 import type { ResumoOperador } from "@/services/dashboard.service"
 
@@ -43,8 +43,8 @@ export default function DashboardPage() {
 
       {loading || !resumo ? (
         <div className="space-y-6">
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {Array.from({ length: 3 }).map((_, i) => (
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {Array.from({ length: 2 }).map((_, i) => (
               <Skeleton key={i} className="h-36" />
             ))}
           </div>
@@ -56,10 +56,9 @@ export default function DashboardPage() {
         </div>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <StatCard {...resumo.digitadas} />
             <StatCard {...resumo.contas} />
-            <StatCard {...resumo.socios} />
           </div>
 
           {resumo.seguros.length > 0 && (
@@ -73,21 +72,47 @@ export default function DashboardPage() {
             </div>
           )}
 
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle className="text-base">Evolução no mês</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <EvolucaoChart data={resumo.evolucao} />
-              </CardContent>
-            </Card>
+          {resumo.socios.length > 0 && (
+            <div className="space-y-3">
+              <h2 className="text-sm font-medium text-muted-foreground">Sócios</h2>
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                {resumo.socios.map((socio) => (
+                  <StatCard key={socio.tipoSocioId} {...socio} />
+                ))}
+              </div>
+            </div>
+          )}
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Evolução no mês</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EvolucaoChart data={resumo.evolucao} />
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Composição de seguros</CardTitle>
               </CardHeader>
               <CardContent>
-                <ComposicaoSegurosChart data={resumo.composicaoSeguros} />
+                <ComposicaoChart
+                  data={resumo.composicaoSeguros}
+                  mensagemVazio="Nenhum lançamento de seguro no período."
+                />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Composição de sócios</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ComposicaoChart
+                  data={resumo.composicaoSocios}
+                  mensagemVazio="Nenhum lançamento de sócio no período."
+                />
               </CardContent>
             </Card>
           </div>

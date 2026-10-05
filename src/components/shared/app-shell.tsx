@@ -12,6 +12,7 @@ import {
   ShieldCheck,
   Target,
   Trophy,
+  UserRound,
   Users,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
@@ -36,6 +37,7 @@ const ADMIN_NAV_ITEMS: NavItem[] = [
   { href: "/admin", label: "Visão Geral", icon: LayoutDashboard },
   { href: "/admin/operadores", label: "Operadores", icon: Users },
   { href: "/admin/seguros", label: "Tipos de Seguro", icon: ShieldCheck },
+  { href: "/admin/socios", label: "Tipos de Sócio", icon: UserRound },
   { href: "/admin/metas", label: "Metas Mensais", icon: Target },
   { href: "/admin/fechamento", label: "Fechamento Diário", icon: ClipboardList },
   { href: "/admin/ranking", label: "Ranking", icon: Trophy },

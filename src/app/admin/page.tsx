@@ -12,13 +12,13 @@ import { PeriodoSelect } from "@/components/shared/period-select"
 import { ComparativoChart } from "@/components/dashboard/comparativo-chart"
 import { apiFetch } from "@/lib/api-client"
 import type { RankingItem } from "@/services/ranking.service"
-import type { TipoSeguro } from "@/generated/prisma/client"
+import type { TipoSeguro, TipoSocio } from "@/generated/prisma/client"
 
 const OPCOES_METRICA = [
   { value: "digitadas", label: "Digitadas" },
   { value: "contas", label: "Contas" },
-  { value: "socios", label: "Sócios" },
   { value: "seguros", label: "Total de Seguros" },
+  { value: "socios", label: "Total de Sócios" },
 ]
 
 export default function AdminOverviewPage() {
@@ -27,12 +27,16 @@ export default function AdminOverviewPage() {
   const [ano, setAno] = useState(now.getFullYear())
   const [metrica, setMetrica] = useState("digitadas")
   const [tiposSeguro, setTiposSeguro] = useState<Pick<TipoSeguro, "id" | "nome">[]>([])
+  const [tiposSocio, setTiposSocio] = useState<Pick<TipoSocio, "id" | "nome">[]>([])
   const [ranking, setRanking] = useState<RankingItem[] | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     apiFetch<Pick<TipoSeguro, "id" | "nome">[]>("/api/seguros")
       .then(setTiposSeguro)
+      .catch((error: Error) => toast.error(error.message))
+    apiFetch<Pick<TipoSocio, "id" | "nome">[]>("/api/socios")
+      .then(setTiposSocio)
       .catch((error: Error) => toast.error(error.message))
   }, [])
 
@@ -52,15 +56,15 @@ export default function AdminOverviewPage() {
   }, [mes, ano, metrica])
 
   const totais = useMemo(() => {
-    if (!ranking) return { digitadas: 0, contas: 0, socios: 0, seguros: 0 }
+    if (!ranking) return { digitadas: 0, contas: 0, seguros: 0, socios: 0 }
     return ranking.reduce(
       (acc, item) => ({
         digitadas: acc.digitadas + item.qtdDigitadas,
         contas: acc.contas + item.qtdContas,
-        socios: acc.socios + item.qtdSocios,
         seguros: acc.seguros + item.totalSeguros,
+        socios: acc.socios + item.totalSocios,
       }),
-      { digitadas: 0, contas: 0, socios: 0, seguros: 0 }
+      { digitadas: 0, contas: 0, seguros: 0, socios: 0 }
     )
   }, [ranking])
 
@@ -69,8 +73,12 @@ export default function AdminOverviewPage() {
       const id = Number(metrica.slice("seguro:".length))
       return tiposSeguro.find((t) => t.id === id)?.nome ?? "Seguro"
     }
+    if (metrica.startsWith("socio:")) {
+      const id = Number(metrica.slice("socio:".length))
+      return tiposSocio.find((t) => t.id === id)?.nome ?? "Sócio"
+    }
     return OPCOES_METRICA.find((o) => o.value === metrica)?.label ?? metrica
-  }, [metrica, tiposSeguro])
+  }, [metrica, tiposSeguro, tiposSocio])
 
   const dadosComparativo = useMemo(
     () => (ranking ?? []).map((item) => ({ nome: item.nome, valor: item.valorMetricaPrincipal })),
@@ -97,8 +105,8 @@ export default function AdminOverviewPage() {
           : [
               { label: "Digitadas", valor: totais.digitadas },
               { label: "Contas", valor: totais.contas },
-              { label: "Sócios", valor: totais.socios },
               { label: "Seguros", valor: totais.seguros },
+              { label: "Sócios", valor: totais.socios },
             ].map((item) => (
               <Card key={item.label}>
                 <CardHeader className="pb-2">
@@ -127,7 +135,12 @@ export default function AdminOverviewPage() {
                   </SelectItem>
                 ))}
                 {tiposSeguro.map((t) => (
-                  <SelectItem key={t.id} value={`seguro:${t.id}`}>
+                  <SelectItem key={`seguro:${t.id}`} value={`seguro:${t.id}`}>
+                    {t.nome}
+                  </SelectItem>
+                ))}
+                {tiposSocio.map((t) => (
+                  <SelectItem key={`socio:${t.id}`} value={`socio:${t.id}`}>
                     {t.nome}
                   </SelectItem>
                 ))}

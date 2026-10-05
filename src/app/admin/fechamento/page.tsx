@@ -15,25 +15,30 @@ import { toDateParam } from "@/lib/date-format"
 type LinhaOperador = {
   qtdDigitadas: number
   qtdContas: number
-  qtdSocios: number
   seguros: Record<number, number>
+  socios: Record<number, number>
 }
 
 type FechamentoResponse = {
   data: string
   tiposSeguro: { id: number; nome: string }[]
+  tiposSocio: { id: number; nome: string }[]
   operadores: {
     operadorId: number
     nome: string
     qtdDigitadas: number
     qtdContas: number
-    qtdSocios: number
     seguros: Record<number, number>
+    socios: Record<number, number>
   }[]
 }
 
 function linhaVazia(): LinhaOperador {
-  return { qtdDigitadas: 0, qtdContas: 0, qtdSocios: 0, seguros: {} }
+  return { qtdDigitadas: 0, qtdContas: 0, seguros: {}, socios: {} }
+}
+
+function somarRegistro(registro: Record<number, number>): number {
+  return Object.values(registro).reduce((acc, v) => acc + v, 0)
 }
 
 export default function FechamentoDiarioPage() {
@@ -41,6 +46,7 @@ export default function FechamentoDiarioPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [tiposSeguro, setTiposSeguro] = useState<{ id: number; nome: string }[]>([])
+  const [tiposSocio, setTiposSocio] = useState<{ id: number; nome: string }[]>([])
   const [operadores, setOperadores] = useState<{ operadorId: number; nome: string }[]>([])
   const [linhas, setLinhas] = useState<Record<number, LinhaOperador>>({})
 
@@ -50,14 +56,15 @@ export default function FechamentoDiarioPage() {
       .then((fechamento) => {
         if (!ativo) return
         setTiposSeguro(fechamento.tiposSeguro)
+        setTiposSocio(fechamento.tiposSocio)
         setOperadores(fechamento.operadores.map((o) => ({ operadorId: o.operadorId, nome: o.nome })))
         const mapa: Record<number, LinhaOperador> = {}
         for (const op of fechamento.operadores) {
           mapa[op.operadorId] = {
             qtdDigitadas: op.qtdDigitadas,
             qtdContas: op.qtdContas,
-            qtdSocios: op.qtdSocios,
             seguros: { ...op.seguros },
+            socios: { ...op.socios },
           }
         }
         setLinhas(mapa)
@@ -71,7 +78,7 @@ export default function FechamentoDiarioPage() {
     }
   }, [data])
 
-  function atualizarLinha(operadorId: number, patch: Partial<Omit<LinhaOperador, "seguros">>) {
+  function atualizarLinha(operadorId: number, patch: Partial<Pick<LinhaOperador, "qtdDigitadas" | "qtdContas">>) {
     setLinhas((prev) => ({ ...prev, [operadorId]: { ...(prev[operadorId] ?? linhaVazia()), ...patch } }))
   }
 
@@ -85,29 +92,43 @@ export default function FechamentoDiarioPage() {
     })
   }
 
+  function atualizarSocio(operadorId: number, tipoSocioId: number, quantidade: number) {
+    setLinhas((prev) => {
+      const atual = prev[operadorId] ?? linhaVazia()
+      return {
+        ...prev,
+        [operadorId]: { ...atual, socios: { ...atual.socios, [tipoSocioId]: quantidade } },
+      }
+    })
+  }
+
   const totais = useMemo(() => {
     let digitadas = 0
     let contas = 0
-    let socios = 0
     const porSeguro: Record<number, number> = {}
+    const porSocio: Record<number, number> = {}
 
     for (const op of operadores) {
       const linha = linhas[op.operadorId] ?? linhaVazia()
       digitadas += linha.qtdDigitadas
       contas += linha.qtdContas
-      socios += linha.qtdSocios
       for (const tipo of tiposSeguro) {
         porSeguro[tipo.id] = (porSeguro[tipo.id] ?? 0) + (linha.seguros[tipo.id] ?? 0)
       }
+      for (const tipo of tiposSocio) {
+        porSocio[tipo.id] = (porSocio[tipo.id] ?? 0) + (linha.socios[tipo.id] ?? 0)
+      }
     }
 
-    const totalSeguros = Object.values(porSeguro).reduce((acc, v) => acc + v, 0)
-    return { digitadas, contas, socios, porSeguro, totalSeguros }
-  }, [linhas, operadores, tiposSeguro])
-
-  function totalSegurosLinha(linha: LinhaOperador): number {
-    return Object.values(linha.seguros).reduce((acc, v) => acc + v, 0)
-  }
+    return {
+      digitadas,
+      contas,
+      porSeguro,
+      porSocio,
+      totalSeguros: somarRegistro(porSeguro),
+      totalSocios: somarRegistro(porSocio),
+    }
+  }, [linhas, operadores, tiposSeguro, tiposSocio])
 
   async function handleSalvar() {
     setSaving(true)
@@ -122,10 +143,13 @@ export default function FechamentoDiarioPage() {
               operadorId: op.operadorId,
               qtdDigitadas: linha.qtdDigitadas,
               qtdContas: linha.qtdContas,
-              qtdSocios: linha.qtdSocios,
               seguros: tiposSeguro.map((tipo) => ({
                 tipoSeguroId: tipo.id,
                 quantidade: linha.seguros[tipo.id] ?? 0,
+              })),
+              socios: tiposSocio.map((tipo) => ({
+                tipoSocioId: tipo.id,
+                quantidade: linha.socios[tipo.id] ?? 0,
               })),
             }
           }),
@@ -168,13 +192,18 @@ export default function FechamentoDiarioPage() {
                   <TableHead className="sticky left-0 bg-card">Operador</TableHead>
                   <TableHead className="text-right">Digitadas</TableHead>
                   <TableHead className="text-right">Contas</TableHead>
-                  <TableHead className="text-right">Sócios</TableHead>
                   {tiposSeguro.map((tipo) => (
                     <TableHead key={tipo.id} className="text-right">
                       {tipo.nome}
                     </TableHead>
                   ))}
                   <TableHead className="text-right">Total Seguros</TableHead>
+                  {tiposSocio.map((tipo) => (
+                    <TableHead key={tipo.id} className="text-right">
+                      {tipo.nome}
+                    </TableHead>
+                  ))}
+                  <TableHead className="text-right">Total Sócios</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -205,17 +234,6 @@ export default function FechamentoDiarioPage() {
                           }
                         />
                       </TableCell>
-                      <TableCell>
-                        <Input
-                          type="number"
-                          min={0}
-                          className="w-20 text-right"
-                          value={linha.qtdSocios}
-                          onChange={(e) =>
-                            atualizarLinha(op.operadorId, { qtdSocios: Math.max(0, Number(e.target.value)) })
-                          }
-                        />
-                      </TableCell>
                       {tiposSeguro.map((tipo) => (
                         <TableCell key={tipo.id}>
                           <Input
@@ -228,7 +246,21 @@ export default function FechamentoDiarioPage() {
                         </TableCell>
                       ))}
                       <TableCell className="text-right font-medium tabular-nums">
-                        {totalSegurosLinha(linha)}
+                        {somarRegistro(linha.seguros)}
+                      </TableCell>
+                      {tiposSocio.map((tipo) => (
+                        <TableCell key={tipo.id}>
+                          <Input
+                            type="number"
+                            min={0}
+                            className="w-20 text-right"
+                            value={linha.socios[tipo.id] ?? 0}
+                            onChange={(e) => atualizarSocio(op.operadorId, tipo.id, Math.max(0, Number(e.target.value)))}
+                          />
+                        </TableCell>
+                      ))}
+                      <TableCell className="text-right font-medium tabular-nums">
+                        {somarRegistro(linha.socios)}
                       </TableCell>
                     </TableRow>
                   )
@@ -237,13 +269,18 @@ export default function FechamentoDiarioPage() {
                   <TableCell className="sticky left-0 bg-muted/50">TOTAL DO DIA</TableCell>
                   <TableCell className="text-right tabular-nums">{totais.digitadas}</TableCell>
                   <TableCell className="text-right tabular-nums">{totais.contas}</TableCell>
-                  <TableCell className="text-right tabular-nums">{totais.socios}</TableCell>
                   {tiposSeguro.map((tipo) => (
                     <TableCell key={tipo.id} className="text-right tabular-nums">
                       {totais.porSeguro[tipo.id] ?? 0}
                     </TableCell>
                   ))}
                   <TableCell className="text-right tabular-nums">{totais.totalSeguros}</TableCell>
+                  {tiposSocio.map((tipo) => (
+                    <TableCell key={tipo.id} className="text-right tabular-nums">
+                      {totais.porSocio[tipo.id] ?? 0}
+                    </TableCell>
+                  ))}
+                  <TableCell className="text-right tabular-nums">{totais.totalSocios}</TableCell>
                 </TableRow>
               </TableBody>
             </Table>

@@ -9,7 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { PeriodoSelect } from "@/components/shared/period-select"
 import { EvolucaoChart } from "@/components/dashboard/evolucao-chart"
-import { ComposicaoSegurosChart } from "@/components/dashboard/composicao-seguros-chart"
+import { ComposicaoChart } from "@/components/dashboard/composicao-chart"
 import { apiFetch } from "@/lib/api-client"
 import type { RelatorioExecutivo } from "@/services/dashboard.service"
 
@@ -40,8 +40,8 @@ export default function RelatoriosPage() {
   const totalGeral = relatorio
     ? relatorio.totalEquipe.qtdDigitadas +
       relatorio.totalEquipe.qtdContas +
-      relatorio.totalEquipe.qtdSocios +
-      relatorio.totalEquipe.totalSeguros
+      relatorio.totalEquipe.totalSeguros +
+      relatorio.totalEquipe.totalSocios
     : 0
 
   return (
@@ -59,14 +59,14 @@ export default function RelatoriosPage() {
       </div>
 
       {loading || !relatorio ? (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-28" />
           ))}
         </div>
       ) : (
         <>
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Total da Equipe</CardTitle>
@@ -107,23 +107,49 @@ export default function RelatoriosPage() {
                 </p>
               </CardContent>
             </Card>
-          </div>
-
-          <div className="grid gap-4 lg:grid-cols-3">
-            <Card className="lg:col-span-2">
-              <CardHeader>
-                <CardTitle className="text-base">Evolução da equipe no mês</CardTitle>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Melhor Sócio</CardTitle>
               </CardHeader>
               <CardContent>
-                <EvolucaoChart data={relatorio.evolucaoEquipe} />
+                <p className="text-lg font-semibold">{relatorio.melhorSocio?.nome ?? "—"}</p>
+                <p className="text-xs text-muted-foreground">
+                  {relatorio.melhorSocio ? `${relatorio.melhorSocio.total} unidades` : "Sem dados"}
+                </p>
               </CardContent>
             </Card>
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-base">Evolução da equipe no mês</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <EvolucaoChart data={relatorio.evolucaoEquipe} />
+            </CardContent>
+          </Card>
+
+          <div className="grid gap-4 lg:grid-cols-2">
             <Card>
               <CardHeader>
                 <CardTitle className="text-base">Composição de seguros</CardTitle>
               </CardHeader>
               <CardContent>
-                <ComposicaoSegurosChart data={relatorio.composicaoSeguros} />
+                <ComposicaoChart
+                  data={relatorio.composicaoSeguros}
+                  mensagemVazio="Nenhum lançamento de seguro no período."
+                />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Composição de sócios</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <ComposicaoChart
+                  data={relatorio.composicaoSocios}
+                  mensagemVazio="Nenhum lançamento de sócio no período."
+                />
               </CardContent>
             </Card>
           </div>
@@ -140,8 +166,8 @@ export default function RelatoriosPage() {
                     <TableHead>Operador</TableHead>
                     <TableHead className="text-right">Digitadas</TableHead>
                     <TableHead className="text-right">Contas</TableHead>
-                    <TableHead className="text-right">Sócios</TableHead>
                     <TableHead className="text-right">Seguros</TableHead>
+                    <TableHead className="text-right">Sócios</TableHead>
                     <TableHead className="text-right">% Meta</TableHead>
                   </TableRow>
                 </TableHeader>
@@ -158,8 +184,8 @@ export default function RelatoriosPage() {
                       <TableCell className="font-medium">{item.nome}</TableCell>
                       <TableCell className="text-right tabular-nums">{item.qtdDigitadas}</TableCell>
                       <TableCell className="text-right tabular-nums">{item.qtdContas}</TableCell>
-                      <TableCell className="text-right tabular-nums">{item.qtdSocios}</TableCell>
                       <TableCell className="text-right tabular-nums">{item.totalSeguros}</TableCell>
+                      <TableCell className="text-right tabular-nums">{item.totalSocios}</TableCell>
                       <TableCell className="text-right tabular-nums">{item.percentualMeta.toFixed(1)}%</TableCell>
                     </TableRow>
                   ))}

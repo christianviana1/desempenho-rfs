@@ -10,6 +10,7 @@ export type RankingOrdenarPor =
   | "seguros"
   | "percentualMeta"
   | { seguroId: number }
+  | { socioId: number }
 
 export type RankingItem = {
   posicao: number
@@ -17,13 +18,14 @@ export type RankingItem = {
   nome: string
   qtdDigitadas: number
   qtdContas: number
-  qtdSocios: number
   totalSeguros: number
   seguros: Record<number, number>
+  totalSocios: number
+  socios: Record<number, number>
   metaDigitadas: number
   metaContas: number
-  metaSocios: number
   metaSegurosTotal: number
+  metaSociosTotal: number
   /** percentual geral de atingimento de meta — ver documentação em getRanking() */
   percentualMeta: number
   /** valor da métrica escolhida em `ordenarPor`, exposto para a coluna de destaque na UI */
@@ -35,6 +37,10 @@ export function parseOrdenarPor(valor: string | null): RankingOrdenarPor {
   if (valor.startsWith("seguro:")) {
     const seguroId = Number(valor.slice("seguro:".length))
     if (Number.isFinite(seguroId) && seguroId > 0) return { seguroId }
+  }
+  if (valor.startsWith("socio:")) {
+    const socioId = Number(valor.slice("socio:".length))
+    if (Number.isFinite(socioId) && socioId > 0) return { socioId }
   }
   if (
     valor === "digitadas" ||
@@ -48,15 +54,20 @@ export function parseOrdenarPor(valor: string | null): RankingOrdenarPor {
   return "digitadas"
 }
 
-function metricaPrincipal(item: Omit<RankingItem, "posicao" | "valorMetricaPrincipal">, ordenarPor: RankingOrdenarPor): number {
-  if (typeof ordenarPor === "object") return item.seguros[ordenarPor.seguroId] ?? 0
+function metricaPrincipal(
+  item: Omit<RankingItem, "posicao" | "valorMetricaPrincipal">,
+  ordenarPor: RankingOrdenarPor
+): number {
+  if (typeof ordenarPor === "object") {
+    return "seguroId" in ordenarPor ? (item.seguros[ordenarPor.seguroId] ?? 0) : (item.socios[ordenarPor.socioId] ?? 0)
+  }
   switch (ordenarPor) {
     case "digitadas":
       return item.qtdDigitadas
     case "contas":
       return item.qtdContas
     case "socios":
-      return item.qtdSocios
+      return item.totalSocios
     case "seguros":
       return item.totalSeguros
     case "percentualMeta":
@@ -75,9 +86,9 @@ function metricaPrincipal(item: Omit<RankingItem, "posicao" | "valorMetricaPrinc
  *
  * O "percentual geral de atingimento de meta" (critério 2) é sempre
  * calculado da mesma forma, independente da métrica principal escolhida:
- * soma(digitadas + contas + sócios + total de seguros realizados) dividido
- * pela soma das respectivas metas (0 quando a soma de metas é 0, para não
- * favorecer operadores sem nenhuma meta cadastrada).
+ * soma(digitadas + contas + total de seguros + total de sócios realizados)
+ * dividido pela soma das respectivas metas (0 quando a soma de metas é 0,
+ * para não favorecer operadores sem nenhuma meta cadastrada).
  *
  * A meta é individual e única por período (o mesmo alvo vale para todos os
  * operadores ativos, não é configurada por operador — ver meta.service.ts),
@@ -93,13 +104,13 @@ export async function getRanking(params: {
   const [totais, meta] = await Promise.all([getTotaisMensalPorOperador(mes, ano), getMetaMensal(mes, ano)])
 
   const metaSegurosTotal = meta?.metasSeguros.reduce((acc, s) => acc + s.quantidadeMeta, 0) ?? 0
+  const metaSociosTotal = meta?.metasSocios.reduce((acc, s) => acc + s.quantidadeMeta, 0) ?? 0
   const metaDigitadas = meta?.metaDigitadas ?? 0
   const metaContas = meta?.metaContas ?? 0
-  const metaSocios = meta?.metaSocios ?? 0
 
   const itensSemPosicao = totais.map((total) => {
-    const realizadoTotal = total.qtdDigitadas + total.qtdContas + total.qtdSocios + total.totalSeguros
-    const metaTotal = metaDigitadas + metaContas + metaSocios + metaSegurosTotal
+    const realizadoTotal = total.qtdDigitadas + total.qtdContas + total.totalSeguros + total.totalSocios
+    const metaTotal = metaDigitadas + metaContas + metaSegurosTotal + metaSociosTotal
     const percentualMeta = metaTotal > 0 ? (realizadoTotal / metaTotal) * 100 : 0
 
     return {
@@ -107,13 +118,14 @@ export async function getRanking(params: {
       nome: total.nome,
       qtdDigitadas: total.qtdDigitadas,
       qtdContas: total.qtdContas,
-      qtdSocios: total.qtdSocios,
       totalSeguros: total.totalSeguros,
       seguros: total.seguros,
+      totalSocios: total.totalSocios,
+      socios: total.socios,
       metaDigitadas,
       metaContas,
-      metaSocios,
       metaSegurosTotal,
+      metaSociosTotal,
       percentualMeta,
     }
   })

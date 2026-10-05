@@ -7,6 +7,11 @@ export const metaSeguroInputSchema = z.object({
   quantidadeMeta: nonNegativeInt,
 })
 
+export const metaSocioInputSchema = z.object({
+  tipoSocioId: z.number().int().positive(),
+  quantidadeMeta: nonNegativeInt,
+})
+
 /** A meta é individual (o mesmo alvo vale para todos os operadores ativos), não configurada por operador. */
 export const upsertMetaMensalSchema = z
   .object({
@@ -14,12 +19,16 @@ export const upsertMetaMensalSchema = z
     ano: z.number().int().min(2000, "Ano inválido.").max(2100, "Ano inválido."),
     metaDigitadas: nonNegativeInt,
     metaContas: nonNegativeInt,
-    metaSocios: nonNegativeInt,
     seguros: z.array(metaSeguroInputSchema),
+    socios: z.array(metaSocioInputSchema),
   })
   .refine(
     (data) => new Set(data.seguros.map((s) => s.tipoSeguroId)).size === data.seguros.length,
     { message: "Cada tipo de seguro deve aparecer apenas uma vez.", path: ["seguros"] }
+  )
+  .refine(
+    (data) => new Set(data.socios.map((s) => s.tipoSocioId)).size === data.socios.length,
+    { message: "Cada tipo de sócio deve aparecer apenas uma vez.", path: ["socios"] }
   )
 
 export type UpsertMetaMensalInput = z.infer<typeof upsertMetaMensalSchema>

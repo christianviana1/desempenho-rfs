@@ -11,13 +11,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PeriodoSelect } from "@/components/shared/period-select"
 import { apiFetch } from "@/lib/api-client"
 import type { RankingItem } from "@/services/ranking.service"
-import type { TipoSeguro } from "@/generated/prisma/client"
+import type { TipoSeguro, TipoSocio } from "@/generated/prisma/client"
 
 const OPCOES_FIXAS = [
   { value: "digitadas", label: "Mais Digitadas" },
   { value: "contas", label: "Mais Contas" },
-  { value: "socios", label: "Mais Sócios" },
   { value: "seguros", label: "Mais Seguros" },
+  { value: "socios", label: "Mais Sócios" },
   { value: "percentualMeta", label: "Melhor % da Meta" },
 ]
 
@@ -30,12 +30,16 @@ export function RankingTable() {
   const [ano, setAno] = useState(now.getFullYear())
   const [ordenarPor, setOrdenarPor] = useState("digitadas")
   const [tiposSeguro, setTiposSeguro] = useState<Pick<TipoSeguro, "id" | "nome">[]>([])
+  const [tiposSocio, setTiposSocio] = useState<Pick<TipoSocio, "id" | "nome">[]>([])
   const [ranking, setRanking] = useState<RankingItem[] | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     apiFetch<Pick<TipoSeguro, "id" | "nome">[]>("/api/seguros")
       .then(setTiposSeguro)
+      .catch((error: Error) => toast.error(error.message))
+    apiFetch<Pick<TipoSocio, "id" | "nome">[]>("/api/socios")
+      .then(setTiposSocio)
       .catch((error: Error) => toast.error(error.message))
   }, [])
 
@@ -60,6 +64,12 @@ export function RankingTable() {
     return tiposSeguro.find((t) => t.id === id) ?? null
   }, [ordenarPor, tiposSeguro])
 
+  const socioSelecionado = useMemo(() => {
+    if (!ordenarPor.startsWith("socio:")) return null
+    const id = Number(ordenarPor.slice("socio:".length))
+    return tiposSocio.find((t) => t.id === id) ?? null
+  }, [ordenarPor, tiposSocio])
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -82,7 +92,12 @@ export function RankingTable() {
               </SelectItem>
             ))}
             {tiposSeguro.map((t) => (
-              <SelectItem key={t.id} value={`seguro:${t.id}`}>
+              <SelectItem key={`seguro:${t.id}`} value={`seguro:${t.id}`}>
+                Mais {t.nome}
+              </SelectItem>
+            ))}
+            {tiposSocio.map((t) => (
+              <SelectItem key={`socio:${t.id}`} value={`socio:${t.id}`}>
                 Mais {t.nome}
               </SelectItem>
             ))}
@@ -110,10 +125,13 @@ export function RankingTable() {
                   <TableHead>Operador</TableHead>
                   <TableHead className="text-right">Digitadas</TableHead>
                   <TableHead className="text-right">Contas</TableHead>
-                  <TableHead className="text-right">Sócios</TableHead>
                   <TableHead className="text-right">Seguros</TableHead>
                   {seguroSelecionado && (
                     <TableHead className="text-right">{seguroSelecionado.nome}</TableHead>
+                  )}
+                  <TableHead className="text-right">Sócios</TableHead>
+                  {socioSelecionado && (
+                    <TableHead className="text-right">{socioSelecionado.nome}</TableHead>
                   )}
                   <TableHead className="text-right">% Meta</TableHead>
                 </TableRow>
@@ -133,11 +151,16 @@ export function RankingTable() {
                     <TableCell className="font-medium">{item.nome}</TableCell>
                     <TableCell className="text-right tabular-nums">{item.qtdDigitadas}</TableCell>
                     <TableCell className="text-right tabular-nums">{item.qtdContas}</TableCell>
-                    <TableCell className="text-right tabular-nums">{item.qtdSocios}</TableCell>
                     <TableCell className="text-right tabular-nums">{item.totalSeguros}</TableCell>
                     {seguroSelecionado && (
                       <TableCell className="text-right tabular-nums">
                         {item.seguros[seguroSelecionado.id] ?? 0}
+                      </TableCell>
+                    )}
+                    <TableCell className="text-right tabular-nums">{item.totalSocios}</TableCell>
+                    {socioSelecionado && (
+                      <TableCell className="text-right tabular-nums">
+                        {item.socios[socioSelecionado.id] ?? 0}
                       </TableCell>
                     )}
                     <TableCell className="text-right tabular-nums">{item.percentualMeta.toFixed(1)}%</TableCell>

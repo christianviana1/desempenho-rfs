@@ -1,7 +1,7 @@
 // Schema do Sistema de Gestão de Produção, Metas e Ranking de Operadores.
-// Nenhum tipo de seguro ou operador é fixo no código: tipos_seguro é a
-// fonte de verdade e todas as tabelas de meta/lançamento referenciam-na
-// dinamicamente via tipo_seguro_id.
+// Nenhum tipo de seguro/sócio ou operador é fixo no código: tipos_seguro e
+// tipos_socio são a fonte de verdade e todas as tabelas de meta/lançamento
+// referenciam-nas dinamicamente via tipo_seguro_id / tipo_socio_id.
 
 generator client {
   provider = "prisma-client"
@@ -47,20 +47,34 @@ model TipoSeguro {
   @@map("tipos_seguro")
 }
 
+model TipoSocio {
+  id        Int      @id @default(autoincrement())
+  nome      String   @unique @db.VarChar(120)
+  ativo     Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  metasSocios       MetaSocioMensal[]
+  lancamentosSocios LancamentoSocioDiario[]
+
+  @@index([ativo])
+  @@map("tipos_socio")
+}
+
 /// Meta mensal individual — o mesmo alvo vale para todos os operadores
 /// ativos (não é configurada por operador). Uma única linha por mês/ano.
-/// As metas por tipo de seguro ficam em MetaSeguroMensal (1:N), permitindo
-/// qualquer quantidade de seguros ativos sem alterar esta tabela.
+/// As metas por tipo de seguro/sócio ficam em MetaSeguroMensal/MetaSocioMensal
+/// (1:N), permitindo qualquer quantidade de tipos ativos sem alterar esta tabela.
 model MetaMensal {
   id            Int      @id @default(autoincrement())
   mes           Int      @db.TinyInt
   ano           Int
   metaDigitadas Int      @default(0) @map("meta_digitadas") @db.UnsignedInt
   metaContas    Int      @default(0) @map("meta_contas") @db.UnsignedInt
-  metaSocios    Int      @default(0) @map("meta_socios") @db.UnsignedInt
   createdAt     DateTime @default(now()) @map("created_at")
 
   metasSeguros MetaSeguroMensal[]
+  metasSocios  MetaSocioMensal[]
 
   @@unique([mes, ano])
   @@map("metas_mensais")
@@ -80,20 +94,35 @@ model MetaSeguroMensal {
   @@map("metas_seguros_mensais")
 }
 
-/// Lançamento diário consolidado (digitadas/contas/sócios) de um operador.
-/// Os lançamentos por tipo de seguro ficam em LancamentoSeguroDiario (1:N).
+model MetaSocioMensal {
+  id             Int @id @default(autoincrement())
+  metaMensalId   Int @map("meta_mensal_id")
+  tipoSocioId    Int @map("tipo_socio_id")
+  quantidadeMeta Int @default(0) @map("quantidade_meta") @db.UnsignedInt
+
+  metaMensal MetaMensal @relation(fields: [metaMensalId], references: [id], onDelete: Cascade)
+  tipoSocio  TipoSocio  @relation(fields: [tipoSocioId], references: [id], onDelete: Restrict)
+
+  @@unique([metaMensalId, tipoSocioId])
+  @@index([tipoSocioId])
+  @@map("metas_socios_mensais")
+}
+
+/// Lançamento diário consolidado (digitadas/contas) de um operador. Os
+/// lançamentos por tipo de seguro/sócio ficam em LancamentoSeguroDiario e
+/// LancamentoSocioDiario (1:N).
 model LancamentoDiario {
   id           Int      @id @default(autoincrement())
   operadorId   Int      @map("operador_id")
   data         DateTime @db.Date
   qtdDigitadas Int      @default(0) @map("qtd_digitadas") @db.UnsignedInt
   qtdContas    Int      @default(0) @map("qtd_contas") @db.UnsignedInt
-  qtdSocios    Int      @default(0) @map("qtd_socios") @db.UnsignedInt
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   operador Operador                 @relation(fields: [operadorId], references: [id], onDelete: Restrict)
   seguros  LancamentoSeguroDiario[]
+  socios   LancamentoSocioDiario[]
 
   @@unique([operadorId, data])
   @@index([data])
@@ -112,4 +141,18 @@ model LancamentoSeguroDiario {
   @@unique([lancamentoDiarioId, tipoSeguroId])
   @@index([tipoSeguroId])
   @@map("lancamentos_seguros_diarios")
+}
+
+model LancamentoSocioDiario {
+  id                 Int @id @default(autoincrement())
+  lancamentoDiarioId Int @map("lancamento_diario_id")
+  tipoSocioId        Int @map("tipo_socio_id")
+  quantidade         Int @default(0) @db.UnsignedInt
+
+  lancamentoDiario LancamentoDiario @relation(fields: [lancamentoDiarioId], references: [id], onDelete: Cascade)
+  tipoSocio        TipoSocio        @relation(fields: [tipoSocioId], references: [id], onDelete: Restrict)
+
+  @@unique([lancamentoDiarioId, tipoSocioId])
+  @@index([tipoSocioId])
+  @@map("lancamentos_socios_diarios")
 }

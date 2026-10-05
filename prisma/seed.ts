@@ -3,6 +3,7 @@ import { PrismaClient, Perfil } from "../src/generated/prisma/client"
 const prisma = new PrismaClient()
 
 const SEGUROS_INICIAIS = ["Fatura", "Cartão Protegido", "Dados e Bens"]
+const SOCIOS_INICIAIS = ["Sócio Club", "Sócio Plus", "Sócio PJ"]
 
 /**
  * Seed idempotente: pode ser executado múltiplas vezes sem duplicar dados
@@ -28,7 +29,15 @@ async function main() {
     })
   }
 
-  console.log("Seed concluído: admin + tipos de seguro iniciais garantidos.")
+  for (const nome of SOCIOS_INICIAIS) {
+    await prisma.tipoSocio.upsert({
+      where: { nome },
+      update: {},
+      create: { nome, ativo: true },
+    })
+  }
+
+  console.log("Seed concluído: admin + tipos de seguro e sócio iniciais garantidos.")
 }
 
 main()

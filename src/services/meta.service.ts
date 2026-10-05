@@ -7,22 +7,28 @@ import type { UpsertMetaMensalInput } from "@/validations/meta.schema"
 export async function getMetaMensal(mes: number, ano: number) {
   return prisma.metaMensal.findUnique({
     where: { mes_ano: { mes, ano } },
-    include: { metasSeguros: { include: { tipoSeguro: true } } },
+    include: {
+      metasSeguros: { include: { tipoSeguro: true } },
+      metasSocios: { include: { tipoSocio: true } },
+    },
   })
 }
 
 /**
  * Cria ou atualiza a meta mensal do período e substitui integralmente suas
- * metas por seguro (delete + recreate), tudo em uma única transação. Metas
- * para tipos de seguro inativos são silenciosamente ignoradas.
+ * metas por seguro e por sócio (delete + recreate), tudo em uma única
+ * transação. Metas para tipos de seguro/sócio inativos são silenciosamente
+ * ignoradas.
  */
 export async function upsertMetaMensal(input: UpsertMetaMensalInput) {
-  const tiposAtivos = await prisma.tipoSeguro.findMany({
-    where: { ativo: true },
-    select: { id: true },
-  })
-  const idsAtivos = new Set(tiposAtivos.map((t) => t.id))
-  const segurosValidos = input.seguros.filter((s) => idsAtivos.has(s.tipoSeguroId))
+  const [tiposSeguroAtivos, tiposSocioAtivos] = await Promise.all([
+    prisma.tipoSeguro.findMany({ where: { ativo: true }, select: { id: true } }),
+    prisma.tipoSocio.findMany({ where: { ativo: true }, select: { id: true } }),
+  ])
+  const idsSeguroAtivos = new Set(tiposSeguroAtivos.map((t) => t.id))
+  const idsSocioAtivos = new Set(tiposSocioAtivos.map((t) => t.id))
+  const segurosValidos = input.seguros.filter((s) => idsSeguroAtivos.has(s.tipoSeguroId))
+  const sociosValidos = input.socios.filter((s) => idsSocioAtivos.has(s.tipoSocioId))
 
   return prisma.$transaction(async (tx) => {
     const meta = await tx.metaMensal.upsert({
@@ -32,12 +38,10 @@ export async function upsertMetaMensal(input: UpsertMetaMensalInput) {
         ano: input.ano,
         metaDigitadas: input.metaDigitadas,
         metaContas: input.metaContas,
-        metaSocios: input.metaSocios,
       },
       update: {
         metaDigitadas: input.metaDigitadas,
         metaContas: input.metaContas,
-        metaSocios: input.metaSocios,
       },
     })
 
@@ -52,9 +56,23 @@ export async function upsertMetaMensal(input: UpsertMetaMensalInput) {
       })
     }
 
+    await tx.metaSocioMensal.deleteMany({ where: { metaMensalId: meta.id } })
+    if (sociosValidos.length > 0) {
+      await tx.metaSocioMensal.createMany({
+        data: sociosValidos.map((s) => ({
+          metaMensalId: meta.id,
+          tipoSocioId: s.tipoSocioId,
+          quantidadeMeta: s.quantidadeMeta,
+        })),
+      })
+    }
+
     return tx.metaMensal.findUniqueOrThrow({
       where: { id: meta.id },
-      include: { metasSeguros: { include: { tipoSeguro: true } } },
+      include: {
+        metasSeguros: { include: { tipoSeguro: true } },
+        metasSocios: { include: { tipoSocio: true } },
+      },
     })
   })
 }
