@@ -27,10 +27,51 @@ model Operador {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  lancamentosDiarios LancamentoDiario[]
+  lancamentosDiarios   LancamentoDiario[]
+  importacoesPlanilha  ImportacaoPlanilha[]
 
   @@index([ativo])
   @@map("operadores")
+}
+
+model ImportacaoPlanilha {
+  id             Int      @id @default(autoincrement())
+  nomeArquivo    String   @map("nome_arquivo") @db.VarChar(255)
+  importadoPorId Int      @map("importado_por_id")
+  importadoPor   Operador @relation(fields: [importadoPorId], references: [id])
+  importadoEm    DateTime @default(now()) @map("importado_em")
+  totalLinhas    Int      @map("total_linhas")
+
+  linhas ImportacaoLinha[]
+
+  @@index([importadoEm])
+  @@map("importacoes_planilha")
+}
+
+model ImportacaoLinha {
+  id              Int                @id @default(autoincrement())
+  importacaoId    Int                @map("importacao_id")
+  importacao      ImportacaoPlanilha @relation(fields: [importacaoId], references: [id], onDelete: Cascade)
+  linhaOriginal   Int                @map("linha_original")
+  divisao         String?            @db.VarChar(120)
+  regional        String?            @db.VarChar(120)
+  loja            String?            @db.VarChar(160)
+  codLoja         String?            @map("cod_loja") @db.VarChar(40)
+  drt             String?            @db.VarChar(40)
+  nome            String?            @db.VarChar(160)
+  cargo           String?            @db.VarChar(160)
+  dtAdmissao      DateTime?          @map("dt_admissao")
+  situacao        String?            @db.VarChar(40)
+  lojaTransversal String?            @map("loja_transversal") @db.VarChar(10)
+  mesesTrabalho   Float?             @map("meses_trabalho")
+  /// Estrutura aninhada { [grupoMetrica]: { [periodo]: { [campo]: valor } } },
+  /// espelhando os grupos/colunas originais da planilha importada.
+  dados           Json
+
+  @@index([importacaoId])
+  @@index([nome])
+  @@index([loja])
+  @@map("importacoes_linhas")
 }
 
 model TipoSeguro {
