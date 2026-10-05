@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation"
 import {
   BarChart3,
   ClipboardList,
+  FileSpreadsheet,
   LayoutDashboard,
   LineChart,
   Menu,
@@ -42,12 +43,14 @@ const ADMIN_NAV_ITEMS: NavItem[] = [
   { href: "/admin/fechamento", label: "Fechamento Diário", icon: ClipboardList },
   { href: "/admin/ranking", label: "Ranking", icon: Trophy },
   { href: "/admin/relatorios", label: "Relatórios", icon: BarChart3 },
+  { href: "/admin/planilhas", label: "Importar Planilha", icon: FileSpreadsheet },
 ]
 
 const DASHBOARD_NAV_ITEMS: NavItem[] = [
   { href: "/dashboard", label: "Meu Painel", icon: LayoutDashboard },
   { href: "/dashboard/lancamento", label: "Lançar Produção", icon: ClipboardList },
   { href: "/dashboard/ranking", label: "Ranking", icon: Trophy },
+  { href: "/dashboard/planilhas", label: "Planilha da Rede", icon: FileSpreadsheet },
 ]
 
 function isActiveHref(pathname: string, href: string, rootHrefs: string[]): boolean {
@@ -80,8 +83,8 @@ function NavLinks({
             className={cn(
               "flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors",
               active
-                ? "bg-primary text-primary-foreground"
-                : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                ? "bg-sidebar-primary text-sidebar-primary-foreground"
+                : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
             )}
           >
             <Icon className="size-4" />
@@ -114,9 +117,9 @@ export function AppShell({
 
   return (
     <div className="flex min-h-screen w-full">
-      <aside className="hidden w-64 shrink-0 border-r bg-sidebar text-sidebar-foreground md:flex md:flex-col">
-        <div className="flex h-14 items-center gap-2 border-b px-4">
-          <LineChart className="size-5" />
+      <aside className="hidden w-64 shrink-0 border-r border-sidebar-border bg-sidebar text-sidebar-foreground md:flex md:flex-col">
+        <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-4">
+          <LineChart className="size-5 text-sidebar-primary" />
           <span className="font-semibold">Desempenho RFS</span>
         </div>
         <div className="flex-1 overflow-y-auto py-4">
@@ -133,10 +136,13 @@ export function AppShell({
                 <span className="sr-only">Abrir menu</span>
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="w-64 gap-0 p-0">
+            <SheetContent
+              side="left"
+              className="w-64 gap-0 border-sidebar-border bg-sidebar p-0 text-sidebar-foreground"
+            >
               <SheetTitle className="sr-only">Menu de navegação</SheetTitle>
-              <div className="flex h-14 items-center gap-2 border-b px-4">
-                <LineChart className="size-5" />
+              <div className="flex h-14 items-center gap-2 border-b border-sidebar-border px-4">
+                <LineChart className="size-5 text-sidebar-primary" />
                 <span className="font-semibold">Desempenho RFS</span>
               </div>
               <div className="py-4">
